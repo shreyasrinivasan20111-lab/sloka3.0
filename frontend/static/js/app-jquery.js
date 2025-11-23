@@ -31,21 +31,22 @@
                 contentType: 'application/json'
             }, options);
 
-            return $.ajax(settings)
-                .fail(function(xhr) {
-                    const error = {
-                        message: xhr.responseJSON?.error || `HTTP Error ${xhr.status}`,
-                        status: xhr.status,
-                        url: settings.url,
-                        response: xhr.responseJSON,
-                        type: 'API Error'
-                    };
-                    ErrorHandler.show(error);
-                    // Create a proper Error object to throw
-                    const thrownError = new Error(error.message);
-                    thrownError.details = error;
-                    throw thrownError;
-                });
+            const request = $.ajax(settings);
+            
+            // Handle failures without throwing errors that cause "[object Object]"
+            request.fail(function(xhr) {
+                const error = {
+                    message: xhr.responseJSON?.error || `HTTP Error ${xhr.status}`,
+                    status: xhr.status,
+                    url: settings.url,
+                    response: xhr.responseJSON,
+                    type: 'API Error'
+                };
+                ErrorHandler.show(error);
+                console.error('API Call Failed:', error);
+            });
+            
+            return request;
         },
 
         // Authentication
@@ -873,18 +874,44 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
 
     // ==================== Global Error Handlers ====================
     window.onerror = function(message, source, lineno, colno, error) {
-        ErrorHandler.show({
-            message: message,
-            type: 'JavaScript Error',
-            url: source,
-            stack: error?.stack,
-            details: `Line ${lineno}, Column ${colno}`
-        });
+        // Skip showing error widget for "[object Object]" errors from jQuery
+        if (message && message.includes('[object Object]')) {
+            console.error('Skipping [object Object] error display:', {
+                message, source, lineno, colno, error
+            });
+            return true;
+        }
+        
+        try {
+            if (typeof ErrorHandler !== 'undefined' && ErrorHandler.show) {
+                ErrorHandler.show({
+                    message: message,
+                    type: 'JavaScript Error',
+                    url: source,
+                    stack: error?.stack,
+                    details: `Line ${lineno}, Column ${colno}`
+                });
+            } else {
+                console.error('JavaScript Error (ErrorHandler not available):', {
+                    message, source, lineno, colno, error
+                });
+            }
+        } catch (e) {
+            console.error('Error in error handler:', e);
+        }
         return true;
     };
 
     window.onunhandledrejection = function(event) {
         const error = event.reason;
+        
+        // Skip showing error widget for jQuery AJAX failures that are already handled
+        if (error && error.status && error.responseText !== undefined) {
+            console.log('Skipping error widget for handled AJAX failure:', error.status);
+            event.preventDefault();
+            return;
+        }
+        
         let message;
         
         // Better error message handling
@@ -899,24 +926,54 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
             console.error('Unhandled rejection with unclear error:', error);
         }
         
-        ErrorHandler.show({
-            message: message,
-            type: 'Unhandled Promise Rejection',
-            url: error.url || (error.details && error.details.url),
-            status: error.status || (error.details && error.details.status),
-            response: error.response || (error.details && error.details.response),
-            stack: error.stack
-        });
+        // Only show error widget for genuine unhandled errors
+        if (message !== 'An unknown error occurred' || !error.status) {
+            ErrorHandler.show({
+                message: message,
+                type: 'Unhandled Promise Rejection',
+                url: error.url || (error.details && error.details.url),
+                status: error.status || (error.details && error.details.status),
+                response: error.response || (error.details && error.details.response),
+                stack: error.stack
+            });
+        }
+        
         event.preventDefault();
     };
 
     // ==================== Initialize Application ====================
     $(document).ready(function() {
-        console.log('jQuery Student Course Management System initialized');
+        try {
+            console.log('jQuery Student Course Management System initialized');
 
-        Auth.init();
-        CourseManager.init();
-        ModalHandlers.init();
+            // Initialize components safely
+            if (typeof Auth !== 'undefined' && Auth.init) {
+                Auth.init();
+            }
+            
+            if (typeof CourseManager !== 'undefined' && CourseManager.init) {
+                CourseManager.init();
+            }
+            
+            if (typeof ModalHandlers !== 'undefined' && ModalHandlers.init) {
+                ModalHandlers.init();
+            }
+            
+            console.log('Application initialization completed successfully');
+            
+        } catch (error) {
+            console.error('Error during application initialization:', error);
+            // Don't show error widget during init as it might not be ready
+            if (typeof ErrorHandler !== 'undefined' && ErrorHandler.show) {
+                setTimeout(function() {
+                    ErrorHandler.show({
+                        message: 'Application failed to initialize: ' + error.message,
+                        type: 'Initialization Error',
+                        stack: error.stack
+                    });
+                }, 1000);
+            }
+        }
     });
 
 })(jQuery);
