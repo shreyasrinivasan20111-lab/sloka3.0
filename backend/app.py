@@ -128,91 +128,130 @@ def login():
 
 @app.route('/api/signup', methods=['POST'])
 def signup():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
+    try:
+        data = request.json
+        if not data:
+            logger.warning("Signup failed: No JSON data provided")
+            return jsonify({'error': 'No data provided'}), 400
+            
+        email = data.get('email')
+        password = data.get('password')
 
-    logger.info(f"Signup attempt for email: {email}")
+        logger.info(f"Signup attempt for email: {email}")
 
-    if not email or not password:
-        logger.warning(f"Signup failed: Missing credentials | Email: {email}")
-        return jsonify({'error': 'Email and password required'}), 400
+        if not email or not password:
+            logger.warning(f"Signup failed: Missing credentials | Email: {email}")
+            return jsonify({'error': 'Email and password required'}), 400
 
-    # Basic email validation
-    if '@' not in email or '.' not in email:
-        logger.warning(f"Signup failed: Invalid email format | Email: {email}")
-        return jsonify({'error': 'Invalid email format'}), 400
+        # Basic email validation
+        if '@' not in email or '.' not in email:
+            logger.warning(f"Signup failed: Invalid email format | Email: {email}")
+            return jsonify({'error': 'Invalid email format'}), 400
 
-    # Check if email already exists
-    conn = get_connection()
-    log_database_operation('SELECT', 'users', f'Check existing email: {email}')
-    existing = conn.execute('SELECT id FROM users WHERE email = ?', [email]).fetchone()
-    if existing:
+        # Check if email already exists
+        conn = get_connection()
+        log_database_operation('SELECT', 'users', f'Check existing email: {email}')
+        existing = conn.execute('SELECT id FROM users WHERE email = ?', [email]).fetchone()
+        if existing:
+            conn.close()
+            log_authentication('SIGNUP', email, False, 'Email already registered')
+            logger.warning(f"✗ Signup failed: Email already exists | Email: {email}")
+            return jsonify({'error': 'Email already registered'}), 400
+
+        # Create new student account
+        from werkzeug.security import generate_password_hash
+        hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+
+        log_database_operation('INSERT', 'users', f'New student account: {email}')
+        conn.execute('''
+            INSERT INTO users (id, email, hashed_password, role)
+            VALUES (nextval('users_id_seq'), ?, ?, 'student')
+        ''', [email, hashed_password])
+        conn.commit()
+
+        # Get the new user ID
+        user_id = conn.execute('SELECT MAX(id) FROM users').fetchone()[0]
         conn.close()
-        log_authentication('SIGNUP', email, False, 'Email already registered')
-        logger.warning(f"✗ Signup failed: Email already exists | Email: {email}")
-        return jsonify({'error': 'Email already registered'}), 400
 
-    # Create new student account
-    from werkzeug.security import generate_password_hash
-    hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+        # Auto-login after signup
+        session['user_id'] = user_id
+        session['email'] = email
+        session['role'] = 'student'
 
-    log_database_operation('INSERT', 'users', f'New student account: {email}')
-    conn.execute('''
-        INSERT INTO users (id, email, hashed_password, role)
-        VALUES (nextval('users_id_seq'), ?, ?, 'student')
-    ''', [email, hashed_password])
-    conn.commit()
+        log_authentication('SIGNUP', email, True)
+        log_session_activity('START', f"New student account | User ID: {user_id}")
+        logger.info(f"✓ Signup successful | User: {email} | ID: {user_id} | Auto-logged in")
 
-    # Get the new user ID
-    user_id = conn.execute('SELECT MAX(id) FROM users').fetchone()[0]
-    conn.close()
-
-    # Auto-login after signup
-    session['user_id'] = user_id
-    session['email'] = email
-    session['role'] = 'student'
-
-    log_authentication('SIGNUP', email, True)
-    log_session_activity('START', f"New student account | User ID: {user_id}")
-    logger.info(f"✓ Signup successful | User: {email} | ID: {user_id} | Auto-logged in")
-
-    return jsonify({
-        'message': 'Account created successfully',
-        'user': {
-            'id': user_id,
-            'email': email,
-            'role': 'student'
-        }
-    }), 201
+        return jsonify({
+            'message': 'Account created successfully',
+            'user': {
+                'id': user_id,
+                'email': email,
+                'role': 'student'
+            }
+        }), 201
+    
+    except Exception as e:
+        logger.error(f"Signup error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error during signup'}), 500
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
-    user_info = get_user_info()
-    logger.info(f"Logout request | User: {user_info['email']}")
+    try:
+        user_info = get_user_info()
+        logger.info(f"Logout request | User: {user_info['email']}")
 
-    log_session_activity('END', f"User logged out")
-    session.clear()
+        log_session_activity('END', f"User logged out")
+        session.clear()
 
-    logger.info(f"✓ Logout successful | User: {user_info['email']}")
-    return jsonify({'message': 'Logged out successfully'})
+        logger.info(f"✓ Logout successful | User: {user_info['email']}")
+        return jsonify({'message': 'Logged out successfully'})
+    
+    except Exception as e:
+        logger.error(f"Logout error: {str(e)}", exc_info=True)
+        # Still clear session even if logging fails
+        try:
+            session.clear()
+        except:
+            pass
+        return jsonify({'message': 'Logged out successfully'})
 
 @app.route('/api/check-auth', methods=['GET'])
 def check_auth():
     """Check if user is authenticated"""
-    if 'user_id' in session:
-        return jsonify({
-            'authenticated': True,
-            'user': {
-                'id': session.get('user_id'),
-                'email': session.get('email'),
-                'role': session.get('role')
-            }
-        })
-    else:
-        return jsonify({
-            'authenticated': False
-        })
+    try:
+        if 'user_id' in session:
+            user_id = session.get('user_id')
+            email = session.get('email')
+            role = session.get('role')
+            
+            # Validate session data
+            if not user_id or not email or not role:
+                logger.warning(f"Invalid session data found | UserID: {user_id} | Email: {email} | Role: {role}")
+                session.clear()
+                return jsonify({'authenticated': False})
+            
+            return jsonify({
+                'authenticated': True,
+                'user': {
+                    'id': user_id,
+                    'email': email,
+                    'role': role
+                }
+            })
+        else:
+            return jsonify({
+                'authenticated': False
+            })
+    
+    except Exception as e:
+        logger.error(f"Check-auth error: {str(e)}", exc_info=True)
+        # Clear potentially corrupted session and return unauthenticated
+        try:
+            session.clear()
+        except:
+            pass
+        return jsonify({'authenticated': False})
 
 @app.route('/api/me', methods=['GET'])
 @login_required
