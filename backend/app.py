@@ -241,64 +241,170 @@ def logout():
 
 @app.route('/api/check-auth', methods=['GET'])
 def check_auth():
-    """Check if user is authenticated"""
+    """Check if user is authenticated - Ultra-robust version"""
+    response_data = {'authenticated': False}
+    
     try:
-        # First check if session exists and has user_id
-        if not session or 'user_id' not in session:
-            return jsonify({'authenticated': False})
+        # Check if Flask session object exists
+        if not hasattr(request, 'environ') or session is None:
+            return jsonify(response_data), 200
         
-        # Get session data safely
-        user_id = session.get('user_id')
-        email = session.get('email')
-        role = session.get('role')
+        # Safely check session contents
+        session_dict = None
+        try:
+            session_dict = dict(session)
+        except:
+            return jsonify(response_data), 200
         
-        # Validate session data - all fields must be present and valid
+        # Check if user_id exists in session
+        if not session_dict or 'user_id' not in session_dict:
+            return jsonify(response_data), 200
+        
+        # Extract values with multiple fallbacks
+        user_id = None
+        email = None
+        role = None
+        
+        try:
+            user_id = session_dict.get('user_id')
+            email = session_dict.get('email') 
+            role = session_dict.get('role')
+        except:
+            return jsonify(response_data), 200
+        
+        # Validate all required fields exist and are not None/empty
         if not user_id or not email or not role:
-            # Clear corrupted session silently
             try:
                 session.clear()
             except:
                 pass
-            return jsonify({'authenticated': False})
+            return jsonify(response_data), 200
         
-        # Validate user_id is a number
-        if not isinstance(user_id, (int, str)) or (isinstance(user_id, str) and not user_id.isdigit()):
+        # Convert and validate user_id
+        try:
+            if isinstance(user_id, str):
+                if not user_id.strip().isdigit():
+                    try:
+                        session.clear()
+                    except:
+                        pass
+                    return jsonify(response_data), 200
+                user_id = int(user_id.strip())
+            elif not isinstance(user_id, int):
+                try:
+                    session.clear()
+                except:
+                    pass
+                return jsonify(response_data), 200
+        except:
             try:
                 session.clear()
             except:
                 pass
-            return jsonify({'authenticated': False})
+            return jsonify(response_data), 200
         
-        # Validate role is valid
-        if role not in ['admin', 'student']:
+        # Validate email format (basic check)
+        try:
+            email = str(email).strip()
+            if not email or '@' not in email or len(email) < 3:
+                try:
+                    session.clear()
+                except:
+                    pass
+                return jsonify(response_data), 200
+        except:
             try:
                 session.clear()
             except:
                 pass
-            return jsonify({'authenticated': False})
+            return jsonify(response_data), 200
         
-        # All validations passed - return authenticated user
-        return jsonify({
-            'authenticated': True,
-            'user': {
-                'id': int(user_id) if isinstance(user_id, str) else user_id,
-                'email': str(email),
-                'role': str(role)
+        # Validate role
+        try:
+            role = str(role).strip().lower()
+            if role not in ['admin', 'student']:
+                try:
+                    session.clear()
+                except:
+                    pass
+                return jsonify(response_data), 200
+        except:
+            try:
+                session.clear()
+            except:
+                pass
+            return jsonify(response_data), 200
+        
+        # All validations passed - construct response safely
+        try:
+            response_data = {
+                'authenticated': True,
+                'user': {
+                    'id': user_id,
+                    'email': email,
+                    'role': role
+                }
             }
-        })
+            return jsonify(response_data), 200
+        except:
+            return jsonify({'authenticated': False}), 200
     
     except Exception as e:
-        # Log error without using the potentially problematic logger functions
-        import traceback
-        print(f"Check-auth error: {str(e)}")
-        print(f"Traceback: {traceback.format_exc()}")
-        
-        # Clear session safely and return unauthenticated
+        # Ultimate fallback - log error safely and return unauthenticated
         try:
-            session.clear()
+            import sys
+            import traceback
+            error_msg = f"Check-auth critical error: {str(e)}"
+            print(error_msg, file=sys.stderr)
+            print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
         except:
             pass
-        return jsonify({'authenticated': False})
+        
+        # Clear session as last resort
+        try:
+            if session:
+                session.clear()
+        except:
+            pass
+        
+        # Return safe response
+        return jsonify({'authenticated': False}), 200
+
+@app.route('/api/check-auth-simple', methods=['GET'])
+def check_auth_simple():
+    """Ultra-simple auth check for debugging"""
+    try:
+        return jsonify({
+            'authenticated': 'user_id' in session if session else False,
+            'session_exists': session is not None,
+            'debug': 'simple-endpoint-working'
+        }), 200
+    except:
+        return jsonify({
+            'authenticated': False,
+            'session_exists': False,
+            'debug': 'simple-endpoint-error'
+        }), 200
+
+@app.route('/api/debug-db', methods=['GET'])
+def debug_db():
+    """Debug database connectivity"""
+    try:
+        from backend.database import get_connection
+        conn = get_connection()
+        result = conn.execute('SELECT COUNT(*) FROM users').fetchone()
+        conn.close()
+        return jsonify({
+            'db_working': True,
+            'user_count': result[0] if result else 0,
+            'debug': 'db-connection-ok'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'db_working': False,
+            'error': str(e),
+            'debug': 'db-connection-failed'
+        }), 200
 
 @app.route('/api/me', methods=['GET'])
 @login_required
