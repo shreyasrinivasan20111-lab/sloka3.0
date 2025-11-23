@@ -84,38 +84,47 @@ def allowed_file(filename):
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
+    try:
+        data = request.json
+        if not data:
+            logger.warning("Login failed: No JSON data provided")
+            return jsonify({'error': 'No data provided'}), 400
+            
+        email = data.get('email')
+        password = data.get('password')
 
-    logger.info(f"Login attempt for email: {email}")
+        logger.info(f"Login attempt for email: {email}")
 
-    if not email or not password:
-        logger.warning(f"Login failed: Missing credentials | Email: {email}")
-        return jsonify({'error': 'Email and password required'}), 400
+        if not email or not password:
+            logger.warning(f"Login failed: Missing credentials | Email: {email}")
+            return jsonify({'error': 'Email and password required'}), 400
 
-    user = verify_user(email, password)
-    if user:
-        session['user_id'] = user['id']
-        session['email'] = user['email']
-        session['role'] = user['role']
+        user = verify_user(email, password)
+        if user:
+            session['user_id'] = user['id']
+            session['email'] = user['email']
+            session['role'] = user['role']
 
-        log_authentication('LOGIN', email, True)
-        log_session_activity('START', f"User ID: {user['id']}, Role: {user['role']}")
-        logger.info(f"✓ Login successful | User: {email} | Role: {user['role']} | ID: {user['id']}")
+            log_authentication('LOGIN', email, True)
+            log_session_activity('START', f"User ID: {user['id']}, Role: {user['role']}")
+            logger.info(f"✓ Login successful | User: {email} | Role: {user['role']} | ID: {user['id']}")
 
-        return jsonify({
-            'message': 'Login successful',
-            'user': {
-                'id': user['id'],
-                'email': user['email'],
-                'role': user['role']
-            }
-        })
-    else:
-        log_authentication('LOGIN', email, False, 'Invalid credentials')
-        logger.warning(f"✗ Login failed: Invalid credentials | Email: {email}")
-        return jsonify({'error': 'Invalid credentials'}), 401
+            return jsonify({
+                'message': 'Login successful',
+                'user': {
+                    'id': user['id'],
+                    'email': user['email'],
+                    'role': user['role']
+                }
+            })
+        else:
+            log_authentication('LOGIN', email, False, 'Invalid credentials')
+            logger.warning(f"✗ Login failed: Invalid credentials | Email: {email}")
+            return jsonify({'error': 'Invalid credentials'}), 401
+    
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error during login'}), 500
 
 @app.route('/api/signup', methods=['POST'])
 def signup():
