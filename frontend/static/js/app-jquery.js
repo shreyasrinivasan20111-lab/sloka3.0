@@ -41,7 +41,10 @@
                         type: 'API Error'
                     };
                     ErrorHandler.show(error);
-                    throw error;
+                    // Create a proper Error object to throw
+                    const thrownError = new Error(error.message);
+                    thrownError.details = error;
+                    throw thrownError;
                 });
         },
 
@@ -415,7 +418,15 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
             $(document).on('click', '.delete-course-btn', function() {
                 const courseId = $(this).data('course-id');
                 const courseTitle = $(this).data('course-title');
-                CourseManager.deleteCourse(courseId, courseTitle);
+                try {
+                    CourseManager.deleteCourse(courseId, courseTitle);
+                } catch (error) {
+                    console.error('Error in delete course handler:', error);
+                    ErrorHandler.show({
+                        message: 'Failed to delete course: ' + (error.message || error),
+                        type: 'Delete Error'
+                    });
+                }
             });
 
             $(document).on('click', '.assign-course-btn', function() {
@@ -604,8 +615,13 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
                     MessageHandler.show('Course deleted successfully!');
                     CourseManager.loadCourses();
                 })
-                .fail(function() {
-                    // Error already shown
+                .fail(function(xhr, textStatus, errorThrown) {
+                    // Error is already shown by API.call, but we can handle specific cases
+                    console.error('Delete course failed:', {
+                        status: xhr.status,
+                        error: xhr.responseJSON?.error,
+                        textStatus: textStatus
+                    });
                 });
         },
 
@@ -869,12 +885,26 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
 
     window.onunhandledrejection = function(event) {
         const error = event.reason;
+        let message;
+        
+        // Better error message handling
+        if (typeof error === 'string') {
+            message = error;
+        } else if (error && error.message) {
+            message = error.message;
+        } else if (error && error.details && error.details.message) {
+            message = error.details.message;
+        } else {
+            message = 'An unknown error occurred';
+            console.error('Unhandled rejection with unclear error:', error);
+        }
+        
         ErrorHandler.show({
-            message: error.message || String(error),
+            message: message,
             type: 'Unhandled Promise Rejection',
-            url: error.url,
-            status: error.status,
-            response: error.response,
+            url: error.url || (error.details && error.details.url),
+            status: error.status || (error.details && error.details.status),
+            response: error.response || (error.details && error.details.response),
             stack: error.stack
         });
         event.preventDefault();

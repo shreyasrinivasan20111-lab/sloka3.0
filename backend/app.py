@@ -375,29 +375,53 @@ def delete_course(course_id):
     """Delete a course (admin only)"""
     logger.info(f"Deleting course | ID: {course_id}")
 
-    conn = get_connection()
+    try:
+        conn = get_connection()
 
-    # Delete course files from filesystem
-    log_database_operation('SELECT', 'files', f'Get files for course: {course_id}')
-    files = conn.execute('SELECT file_path FROM files WHERE course_id = ?', [course_id]).fetchall()
-    for file in files:
-        try:
-            os.remove(file[0])
-            log_file_operation('DELETE', file[0], f'Course deletion cleanup')
-            logger.debug(f"Deleted file: {file[0]}")
-        except Exception as e:
-            logger.warning(f"Failed to delete file: {file[0]} | Error: {str(e)}")
+        # First, check if course exists
+        course = conn.execute('SELECT title FROM courses WHERE id = ?', [course_id]).fetchone()
+        if not course:
+            conn.close()
+            logger.warning(f"✗ Course not found | ID: {course_id}")
+            return jsonify({'error': 'Course not found'}), 404
 
-    # Delete from database (cascade will handle related records)
-    log_database_operation('DELETE', 'courses', f'Course ID: {course_id}')
-    conn.execute('DELETE FROM courses WHERE id = ?', [course_id])
-    conn.commit()
-    conn.close()
+        # Delete course files from filesystem
+        log_database_operation('SELECT', 'files', f'Get files for course: {course_id}')
+        files = conn.execute('SELECT id, file_path FROM files WHERE course_id = ?', [course_id]).fetchall()
+        for file in files:
+            try:
+                if os.path.exists(file[1]):
+                    os.remove(file[1])
+                    log_file_operation('DELETE', file[1], f'Course deletion cleanup')
+                    logger.debug(f"Deleted file: {file[1]}")
+            except Exception as e:
+                logger.warning(f"Failed to delete file: {file[1]} | Error: {str(e)}")
 
-    log_course_operation('DELETE', course_id)
-    logger.info(f"✓ Course deleted successfully | ID: {course_id}")
+        # Delete related records first (in correct order to avoid foreign key constraints)
+        
+        # 1. Delete files from database
+        log_database_operation('DELETE', 'files', f'All files for course: {course_id}')
+        conn.execute('DELETE FROM files WHERE course_id = ?', [course_id])
+        
+        # 2. Delete course assignments
+        log_database_operation('DELETE', 'assigned_courses', f'All assignments for course: {course_id}')
+        conn.execute('DELETE FROM assigned_courses WHERE course_id = ?', [course_id])
+        
+        # 3. Finally delete the course
+        log_database_operation('DELETE', 'courses', f'Course ID: {course_id}')
+        conn.execute('DELETE FROM courses WHERE id = ?', [course_id])
+        
+        conn.commit()
+        conn.close()
 
-    return jsonify({'message': 'Course deleted'})
+        log_course_operation('DELETE', course_id)
+        logger.info(f"✓ Course deleted successfully | ID: {course_id} | Title: {course[0]}")
+
+        return jsonify({'message': 'Course deleted successfully'})
+        
+    except Exception as e:
+        logger.error(f"✗ Failed to delete course | ID: {course_id} | Error: {str(e)}")
+        return jsonify({'error': f'Failed to delete course: {str(e)}'}), 500
 
 # ============= Assignment Endpoints =============
 
