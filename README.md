@@ -1,10 +1,21 @@
-# Student Course Management System
+# 🎓 Sloka 3.0 - Student Course Management System
 
-A modern single-page application for managing student courses with rich text editing, file attachments, and comprehensive logging.
+A beautiful, modern web application for managing student courses with rich text editing, file attachments, and comprehensive admin controls.
 
-## Features
+![Student Course Management System](https://img.shields.io/badge/Version-3.0-brightgreen)
+![Python](https://img.shields.io/badge/Python-3.9+-blue)
+![Flask](https://img.shields.io/badge/Flask-3.0+-red)
+![DuckDB](https://img.shields.io/badge/DuckDB-1.1+-yellow)
 
-### For Administrators
+## ✨ Features
+
+### 🎨 **Beautiful Design**
+- **Stunning Visual Appeal**: Thick vertical brown stripes (#C5A098 & #B8927F)
+- **Premium Typography**: Nova Round for body text, Limelight for headings
+- **Warm Color Palette**: Rich brown tones (#704f3b) throughout
+- **Responsive Design**: Works perfectly on all devices
+
+### 👩‍🏫 **For Administrators**
 - 📚 Create, edit, and delete courses with rich text content
 - 👥 Assign courses to multiple students
 - 📎 Upload and manage course materials
