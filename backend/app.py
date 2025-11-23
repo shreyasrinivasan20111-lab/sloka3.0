@@ -46,34 +46,57 @@ logger.info(f"Upload folder ready: {config.UPLOAD_FOLDER}")
 @app.before_request
 def before_request():
     """Log all incoming requests"""
-    request.start_time = time.time()
+    try:
+        request.start_time = time.time()
 
-    # Don't log static file requests
-    if request.path.startswith('/static') or request.path.endswith(('.css', '.js', '.png', '.jpg', '.ico')):
-        return
+        # Don't log static file requests
+        if request.path.startswith('/static') or request.path.endswith(('.css', '.js', '.png', '.jpg', '.ico')):
+            return
 
-    user_info = get_user_info()
-    logger.debug(f"→ {request.method} {request.path} | User: {user_info['email']} | IP: {request.remote_addr}")
+        # Get user info safely
+        try:
+            user_info = get_user_info()
+            user_email = user_info.get('email', 'unknown')
+        except:
+            user_email = 'unknown'
+            
+        logger.debug(f"→ {request.method} {request.path} | User: {user_email} | IP: {request.remote_addr}")
+    except Exception as e:
+        # Don't let middleware errors break the request
+        print(f"Before request middleware error: {str(e)}")
+        request.start_time = time.time()  # Ensure this is set
+        pass
 
 @app.after_request
 def after_request(response):
     """Log all outgoing responses"""
-    # Don't log static file requests
-    if request.path.startswith('/static') or request.path.endswith(('.css', '.js', '.png', '.jpg', '.ico')):
-        return response
+    try:
+        # Don't log static file requests
+        if request.path.startswith('/static') or request.path.endswith(('.css', '.js', '.png', '.jpg', '.ico')):
+            return response
 
-    # Calculate request duration
-    if hasattr(request, 'start_time'):
-        duration = (time.time() - request.start_time) * 1000  # Convert to ms
-        user_info = get_user_info()
+        # Calculate request duration
+        if hasattr(request, 'start_time'):
+            duration = (time.time() - request.start_time) * 1000  # Convert to ms
+            
+            # Get user info safely
+            try:
+                user_info = get_user_info()
+                user_email = user_info.get('email', 'unknown')
+            except:
+                user_email = 'unknown'
 
-        log_level = logger.info if response.status_code < 400 else logger.error
-        log_level(
-            f"← {request.method} {request.path} | "
-            f"Status: {response.status_code} | "
-            f"User: {user_info['email']} | "
-            f"Time: {duration:.2f}ms"
-        )
+            log_level = logger.info if response.status_code < 400 else logger.error
+            log_level(
+                f"← {request.method} {request.path} | "
+                f"Status: {response.status_code} | "
+                f"User: {user_email} | "
+                f"Time: {duration:.2f}ms"
+            )
+    except Exception as e:
+        # Don't let middleware errors break the response
+        print(f"Middleware error: {str(e)}")
+        pass
 
     return response
 
@@ -220,33 +243,57 @@ def logout():
 def check_auth():
     """Check if user is authenticated"""
     try:
-        if 'user_id' in session:
-            user_id = session.get('user_id')
-            email = session.get('email')
-            role = session.get('role')
-            
-            # Validate session data
-            if not user_id or not email or not role:
-                logger.warning(f"Invalid session data found | UserID: {user_id} | Email: {email} | Role: {role}")
+        # First check if session exists and has user_id
+        if not session or 'user_id' not in session:
+            return jsonify({'authenticated': False})
+        
+        # Get session data safely
+        user_id = session.get('user_id')
+        email = session.get('email')
+        role = session.get('role')
+        
+        # Validate session data - all fields must be present and valid
+        if not user_id or not email or not role:
+            # Clear corrupted session silently
+            try:
                 session.clear()
-                return jsonify({'authenticated': False})
-            
-            return jsonify({
-                'authenticated': True,
-                'user': {
-                    'id': user_id,
-                    'email': email,
-                    'role': role
-                }
-            })
-        else:
-            return jsonify({
-                'authenticated': False
-            })
+            except:
+                pass
+            return jsonify({'authenticated': False})
+        
+        # Validate user_id is a number
+        if not isinstance(user_id, (int, str)) or (isinstance(user_id, str) and not user_id.isdigit()):
+            try:
+                session.clear()
+            except:
+                pass
+            return jsonify({'authenticated': False})
+        
+        # Validate role is valid
+        if role not in ['admin', 'student']:
+            try:
+                session.clear()
+            except:
+                pass
+            return jsonify({'authenticated': False})
+        
+        # All validations passed - return authenticated user
+        return jsonify({
+            'authenticated': True,
+            'user': {
+                'id': int(user_id) if isinstance(user_id, str) else user_id,
+                'email': str(email),
+                'role': str(role)
+            }
+        })
     
     except Exception as e:
-        logger.error(f"Check-auth error: {str(e)}", exc_info=True)
-        # Clear potentially corrupted session and return unauthenticated
+        # Log error without using the potentially problematic logger functions
+        import traceback
+        print(f"Check-auth error: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        
+        # Clear session safely and return unauthenticated
         try:
             session.clear()
         except:
