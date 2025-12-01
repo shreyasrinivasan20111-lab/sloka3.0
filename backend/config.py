@@ -11,10 +11,15 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
 
     # Database configuration
-    DB_PATH = os.environ.get('DB_PATH') or 'student_courses.db'
-
-    # Upload folder
-    UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or 'uploads'
+    # In serverless environments, use memory database or persistent storage
+    if os.environ.get('VERCEL') == '1':
+        # For Vercel, use a persistent database path in /tmp (which persists during function execution)
+        DB_PATH = os.environ.get('DB_PATH') or '/tmp/student_courses.db'
+        UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or '/tmp/uploads'
+    else:
+        # For local development, use relative paths
+        DB_PATH = os.environ.get('DB_PATH') or 'student_courses.db'
+        UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or 'uploads'
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16MB default
 
     # Allowed file extensions
