@@ -31,8 +31,13 @@ class ColoredFormatter(logging.Formatter):
 def setup_logger(name='app', log_dir='logs'):
     """Setup application logger with file and console handlers"""
 
-    # Create logs directory if it doesn't exist
-    os.makedirs(log_dir, exist_ok=True)
+    # Detect serverless environment (Vercel, AWS Lambda, etc.)
+    is_serverless = (
+        os.environ.get('VERCEL') == '1' or
+        os.environ.get('AWS_LAMBDA_FUNCTION_NAME') or
+        os.environ.get('LAMBDA_RUNTIME_DIR') or
+        os.environ.get('SERVERLESS') == '1'
+    )
 
     # Create logger
     logger = logging.getLogger(name)
@@ -41,47 +46,59 @@ def setup_logger(name='app', log_dir='logs'):
     # Remove existing handlers to avoid duplicates
     logger.handlers.clear()
 
-    # File handler - All logs
-    all_log_file = os.path.join(log_dir, 'all.log')
-    file_handler_all = RotatingFileHandler(
-        all_log_file,
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
-    )
-    file_handler_all.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    file_handler_all.setFormatter(file_formatter)
-    logger.addHandler(file_handler_all)
+    file_handler_api = None
 
-    # File handler - Errors only
-    error_log_file = os.path.join(log_dir, 'errors.log')
-    file_handler_error = RotatingFileHandler(
-        error_log_file,
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
-    )
-    file_handler_error.setLevel(logging.ERROR)
-    file_handler_error.setFormatter(file_formatter)
-    logger.addHandler(file_handler_error)
+    # Only setup file handlers if not in serverless environment
+    if not is_serverless:
+        try:
+            # Create logs directory if it doesn't exist
+            os.makedirs(log_dir, exist_ok=True)
 
-    # File handler - API requests
-    api_log_file = os.path.join(log_dir, 'api_requests.log')
-    file_handler_api = RotatingFileHandler(
-        api_log_file,
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
-    )
-    file_handler_api.setLevel(logging.INFO)
-    api_formatter = logging.Formatter(
-        '%(asctime)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    file_handler_api.setFormatter(api_formatter)
+            # File handler - All logs
+            all_log_file = os.path.join(log_dir, 'all.log')
+            file_handler_all = RotatingFileHandler(
+                all_log_file,
+                maxBytes=10*1024*1024,  # 10MB
+                backupCount=5
+            )
+            file_handler_all.setLevel(logging.DEBUG)
+            file_formatter = logging.Formatter(
+                '%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            file_handler_all.setFormatter(file_formatter)
+            logger.addHandler(file_handler_all)
 
-    # Console handler - with colors
+            # File handler - Errors only
+            error_log_file = os.path.join(log_dir, 'errors.log')
+            file_handler_error = RotatingFileHandler(
+                error_log_file,
+                maxBytes=10*1024*1024,  # 10MB
+                backupCount=5
+            )
+            file_handler_error.setLevel(logging.ERROR)
+            file_handler_error.setFormatter(file_formatter)
+            logger.addHandler(file_handler_error)
+
+            # File handler - API requests
+            api_log_file = os.path.join(log_dir, 'api_requests.log')
+            file_handler_api = RotatingFileHandler(
+                api_log_file,
+                maxBytes=10*1024*1024,  # 10MB
+                backupCount=5
+            )
+            file_handler_api.setLevel(logging.INFO)
+            api_formatter = logging.Formatter(
+                '%(asctime)s | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            file_handler_api.setFormatter(api_formatter)
+
+        except (OSError, PermissionError) as e:
+            # If file logging fails, continue with console logging only
+            print(f"Warning: File logging disabled due to: {e}", file=sys.stderr)
+
+    # Console handler - with colors (always enabled)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_formatter = ColoredFormatter(
@@ -90,6 +107,9 @@ def setup_logger(name='app', log_dir='logs'):
     )
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
+
+    if is_serverless:
+        logger.info("Running in serverless environment - file logging disabled")
 
     return logger, file_handler_api
 
@@ -156,13 +176,14 @@ def log_api_call(func):
 
             logger.info(f"← {request.method} {request.path} | Status: {status_code} | Time: {execution_time:.2f}ms")
 
-            # Log to API file
-            api_logger = logging.getLogger('api')
-            api_logger.addHandler(api_file_handler)
-            api_logger.info(
-                f"{request.method} {request.path} | User: {user_info['email']} | "
-                f"Status: {status_code} | Time: {execution_time:.2f}ms"
-            )
+            # Log to API file if handler exists
+            if api_file_handler:
+                api_logger = logging.getLogger('api')
+                api_logger.addHandler(api_file_handler)
+                api_logger.info(
+                    f"{request.method} {request.path} | User: {user_info['email']} | "
+                    f"Status: {status_code} | Time: {execution_time:.2f}ms"
+                )
 
             return result
 
@@ -177,13 +198,14 @@ def log_api_call(func):
             )
             logger.exception("Exception details:")
 
-            # Log to API file
-            api_logger = logging.getLogger('api')
-            api_logger.addHandler(api_file_handler)
-            api_logger.error(
-                f"{request.method} {request.path} | User: {user_info['email']} | "
-                f"Error: {str(e)} | Time: {execution_time:.2f}ms"
-            )
+            # Log to API file if handler exists
+            if api_file_handler:
+                api_logger = logging.getLogger('api')
+                api_logger.addHandler(api_file_handler)
+                api_logger.error(
+                    f"{request.method} {request.path} | User: {user_info['email']} | "
+                    f"Error: {str(e)} | Time: {execution_time:.2f}ms"
+                )
 
             raise
 
