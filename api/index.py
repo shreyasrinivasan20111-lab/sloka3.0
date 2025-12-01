@@ -9,7 +9,7 @@ os.environ['VERCEL'] = '1'
 
 # Import the Flask application
 from backend.app import app
-from backend.database import init_database
+from backend.database_unified import init_database
 
 # Initialize database on cold start
 try:

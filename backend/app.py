@@ -3,7 +3,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
 import time
-from backend.database import get_connection, init_database
+from backend.database_unified import get_connection, init_database, use_postgres
 from backend.auth import login_required, admin_required, verify_user, get_current_user
 from backend.config import get_config
 from backend.logger import (
@@ -413,33 +413,57 @@ def get_db_status():
     try:
         conn = get_connection()
         
-        # Get counts from all tables
-        user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
-        course_count = conn.execute('SELECT COUNT(*) FROM courses').fetchone()[0]
-        assignment_count = conn.execute('SELECT COUNT(*) FROM assigned_courses').fetchone()[0]
-        file_count = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
-        
-        # Get database file info
-        from backend.config import get_config
-        db_path = get_config().DB_PATH
-        is_serverless = os.environ.get('VERCEL') == '1'
-        db_exists = os.path.exists(db_path)
-        db_size = os.path.getsize(db_path) if db_exists else 0
+        # Get counts from all tables - handle both DuckDB and PostgreSQL
+        if use_postgres():
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM users')
+            user_count = cursor.fetchone()['count']
+            cursor.execute('SELECT COUNT(*) FROM courses')
+            course_count = cursor.fetchone()['count']
+            cursor.execute('SELECT COUNT(*) FROM assigned_courses')
+            assignment_count = cursor.fetchone()['count']
+            cursor.execute('SELECT COUNT(*) FROM files')
+            file_count = cursor.fetchone()['count']
+            cursor.close()
+            
+            db_type = "PostgreSQL"
+            db_path = os.environ.get('DATABASE_URL', 'Environment variable')
+            db_exists = True
+            db_size = "N/A (External Database)"
+            persistent = True
+            
+        else:
+            user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+            course_count = conn.execute('SELECT COUNT(*) FROM courses').fetchone()[0]
+            assignment_count = conn.execute('SELECT COUNT(*) FROM assigned_courses').fetchone()[0]
+            file_count = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
+            
+            from backend.config import get_config
+            db_path = get_config().DB_PATH
+            db_type = "DuckDB"
+            db_exists = os.path.exists(db_path)
+            db_size = os.path.getsize(db_path) if db_exists else 0
+            persistent = not os.environ.get('VERCEL') == '1'
         
         conn.close()
         
+        is_serverless = os.environ.get('VERCEL') == '1'
+        
         return jsonify({
+            'database_type': db_type,
             'database_path': db_path,
             'database_exists': db_exists,
-            'database_size_bytes': db_size,
+            'database_size': db_size,
             'is_serverless_env': is_serverless,
+            'data_persistent': persistent,
             'statistics': {
                 'users': user_count,
                 'courses': course_count,
                 'assignments': assignment_count,
                 'files': file_count
             },
-            'warning': 'Data will be lost on deployment restart in serverless environments' if is_serverless else None
+            'status': '✅ Data will persist across deployments' if persistent else '⚠️ Data will be lost on deployment restart',
+            'recommendation': None if persistent else 'Switch to PostgreSQL for data persistence'
         })
         
     except Exception as e:
