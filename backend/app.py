@@ -413,6 +413,9 @@ def get_db_status():
     try:
         conn = get_connection()
         
+        # Get database type info
+        from backend.database_unified import use_postgres, use_persistent_duckdb
+        
         # Get counts from all tables - handle both DuckDB and PostgreSQL
         if use_postgres():
             cursor = conn.cursor()
@@ -426,11 +429,40 @@ def get_db_status():
             file_count = cursor.fetchone()['count']
             cursor.close()
             
-            db_type = "PostgreSQL"
+            db_type = "PostgreSQL (External)"
             db_path = os.environ.get('DATABASE_URL', 'Environment variable')
             db_exists = True
             db_size = "N/A (External Database)"
             persistent = True
+            storage_info = {
+                'type': 'external_postgres',
+                'persistent': True,
+                'sync_available': False
+            }
+            
+        elif use_persistent_duckdb():
+            user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+            course_count = conn.execute('SELECT COUNT(*) FROM courses').fetchone()[0]
+            assignment_count = conn.execute('SELECT COUNT(*) FROM assigned_courses').fetchone()[0]
+            file_count = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
+            
+            # Get persistent DuckDB storage info
+            try:
+                from backend.database_persistent import get_persistence_info
+                storage_info = get_persistence_info()
+                db_type = f"DuckDB ({storage_info['storage_type'].replace('_', ' ').title()})"
+                db_path = storage_info['database_path']
+                db_exists = storage_info['exists']
+                db_size = f"{storage_info['size_mb']} MB"
+                persistent = storage_info['is_persistent']
+            except Exception as e:
+                logger.warning(f"Failed to get persistent storage info: {e}")
+                db_type = "DuckDB (Persistent - Error)"
+                db_path = "Unknown"
+                db_exists = False
+                db_size = "Unknown"
+                persistent = True
+                storage_info = {'type': 'unknown', 'persistent': True}
             
         else:
             user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
@@ -440,14 +472,39 @@ def get_db_status():
             
             from backend.config import get_config
             db_path = get_config().DB_PATH
-            db_type = "DuckDB"
+            db_type = "DuckDB (Local)"
             db_exists = os.path.exists(db_path)
-            db_size = os.path.getsize(db_path) if db_exists else 0
+            db_size = f"{round(os.path.getsize(db_path) / 1024 / 1024, 2)} MB" if db_exists else "0 MB"
             persistent = not os.environ.get('VERCEL') == '1'
+            storage_info = {
+                'type': 'local_file',
+                'persistent': persistent,
+                'sync_available': False
+            }
         
         conn.close()
         
         is_serverless = os.environ.get('VERCEL') == '1'
+        
+        # Determine status message
+        if persistent:
+            if use_postgres():
+                status_msg = '✅ Data persists in external PostgreSQL database'
+            elif use_persistent_duckdb():
+                status_msg = '✅ Data persists with external DuckDB storage'
+            else:
+                status_msg = '✅ Data persists locally (development mode)'
+        else:
+            status_msg = '⚠️ Data will be lost on deployment restart'
+        
+        # Generate recommendations
+        recommendations = []
+        if not persistent:
+            recommendations.append('Use PostgreSQL or persistent DuckDB for data persistence')
+        if is_serverless and not use_postgres() and not use_persistent_duckdb():
+            recommendations.append('Configure external storage for serverless deployment')
+        if use_persistent_duckdb() and storage_info.get('cloud_sync_enabled'):
+            recommendations.append('Automatic cloud sync is enabled')
         
         return jsonify({
             'database_type': db_type,
@@ -456,19 +513,59 @@ def get_db_status():
             'database_size': db_size,
             'is_serverless_env': is_serverless,
             'data_persistent': persistent,
+            'storage_info': storage_info,
             'statistics': {
                 'users': user_count,
                 'courses': course_count,
                 'assignments': assignment_count,
                 'files': file_count
             },
-            'status': '✅ Data will persist across deployments' if persistent else '⚠️ Data will be lost on deployment restart',
-            'recommendation': None if persistent else 'Switch to PostgreSQL for data persistence'
+            'status': status_msg,
+            'recommendations': recommendations if recommendations else None
         })
         
     except Exception as e:
         logger.error(f"Database status error: {str(e)}")
         return jsonify({'error': f'Failed to get database status: {str(e)}'}), 500
+
+@app.route('/api/db-sync', methods=['POST'])
+@admin_required
+def sync_database():
+    """Manually sync database to cloud storage (admin only)"""
+    try:
+        from backend.database_unified import use_persistent_duckdb
+        
+        if not use_persistent_duckdb():
+            return jsonify({
+                'error': 'Database sync only available with persistent DuckDB storage',
+                'current_storage': 'PostgreSQL' if use_postgres() else 'Local DuckDB'
+            }), 400
+        
+        # Attempt to sync
+        from backend.database_persistent import sync_database as do_sync
+        success = do_sync()
+        
+        if success:
+            logger.info("Manual database sync completed successfully")
+            return jsonify({
+                'message': 'Database synced successfully to cloud storage',
+                'synced_at': time.time()
+            })
+        else:
+            return jsonify({
+                'error': 'Database sync failed - check cloud storage configuration',
+                'help': 'Ensure BLOB_READ_WRITE_TOKEN or other cloud credentials are set'
+            }), 500
+            
+    except ImportError:
+        return jsonify({
+            'error': 'Persistent database module not available'
+        }), 500
+    except Exception as e:
+        logger.error(f"Database sync error: {str(e)}")
+        return jsonify({
+            'error': f'Database sync failed: {str(e)}'
+        }), 500
 
 @app.route('/api/me', methods=['GET'])
 @login_required
