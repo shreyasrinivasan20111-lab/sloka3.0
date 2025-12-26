@@ -1410,6 +1410,10 @@ def index():
 def admin_data():
     return send_from_directory(app.static_folder, 'admin-data.html')
 
+@app.route('/admin-users')
+def admin_users():
+    return send_from_directory(app.static_folder, 'admin-users.html')
+
 @app.route('/api/admin/users/credentials', methods=['GET'])
 @admin_required
 def get_user_credentials_admin():

@@ -19,6 +19,18 @@
       "dest": "api/index.py"
     },
     {
+      "src": "/admin-data",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/admin-users", 
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/frontend/(admin-.*\\.html)",
+      "dest": "api/index.py"
+    },
+    {
       "src": "/(.*)",
       "dest": "frontend/$1"
     }
