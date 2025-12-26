@@ -306,57 +306,103 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
             const $btn = $('#login-form button[type="submit"]');
             $btn.prop('disabled', true).text('Logging in...');
 
-            API.login(email, password)
-                .done(function(result) {
-                    AppState.currentUser = result.user;
-                    MessageHandler.show('Login successful!');
+            // Use enhanced auth handler if available
+            if (window.authHandler && window.authHandler.login) {
+                window.authHandler.login(email, password)
+                    .then(function(result) {
+                        AppState.currentUser = result.user;
+                        MessageHandler.show('Login successful!');
 
-                    if (result.user.role === 'admin') {
-                        ViewManager.showAdminDashboard();
-                    } else {
-                        ViewManager.showStudentDashboard();
-                    }
-                })
-                .fail(function() {
-                    // Error already shown by API.call
-                })
-                .always(function() {
-                    $btn.prop('disabled', false).text('Login');
-                    $('#login-password').val('');
-                });
+                        if (result.user.role === 'admin') {
+                            ViewManager.showAdminDashboard();
+                        } else {
+                            ViewManager.showStudentDashboard();
+                        }
+                    })
+                    .catch(function(error) {
+                        MessageHandler.show(error.message || 'Login failed', 'error');
+                    })
+                    .finally(function() {
+                        $btn.prop('disabled', false).text('Login');
+                    });
+            } else {
+                // Fallback to original API call
+                API.login(email, password)
+                    .done(function(result) {
+                        AppState.currentUser = result.user;
+                        MessageHandler.show('Login successful!');
+
+                        if (result.user.role === 'admin') {
+                            ViewManager.showAdminDashboard();
+                        } else {
+                            ViewManager.showStudentDashboard();
+                        }
+                    })
+                    .fail(function() {
+                        // Error already handled by API.call
+                    })
+                    .always(function() {
+                        $btn.prop('disabled', false).text('Login');
+                        $('#login-password').val('');
+                    });
+            }
         },
 
         signup: function(email, password) {
             const $btn = $('#signup-form button[type="submit"]');
             $btn.prop('disabled', true).text('Signing up...');
 
-            API.signup(email, password)
-                .done(function(result) {
-                    AppState.currentUser = result.user;
-                    MessageHandler.show('Signup successful! You are now logged in.');
-                    ViewManager.showStudentDashboard();
-                })
-                .fail(function() {
-                    // Error already shown by API.call
-                })
-                .always(function() {
-                    $btn.prop('disabled', false).text('Sign Up');
-                    $('#signup-form')[0].reset();
-                });
+            // Use enhanced auth handler if available
+            if (window.authHandler && window.authHandler.signup) {
+                window.authHandler.signup(email, password)
+                    .then(function(result) {
+                        AppState.currentUser = result.user;
+                        MessageHandler.show('Signup successful! You are now logged in.');
+                        ViewManager.showStudentDashboard();
+                    })
+                    .catch(function(error) {
+                        MessageHandler.show(error.message || 'Signup failed', 'error');
+                    })
+                    .finally(function() {
+                        $btn.prop('disabled', false).text('Sign Up');
+                        $('#signup-form')[0].reset();
+                    });
+            } else {
+                // Fallback to original API call
+                API.signup(email, password)
+                    .done(function(result) {
+                        AppState.currentUser = result.user;
+                        MessageHandler.show('Signup successful! You are now logged in.');
+                        ViewManager.showStudentDashboard();
+                    })
+                    .fail(function() {
+                        // Error already shown by API.call
+                    })
+                    .always(function() {
+                        $btn.prop('disabled', false).text('Sign Up');
+                        $('#signup-form')[0].reset();
+                    });
+            }
         },
 
         logout: function() {
-            API.logout()
-                .done(function() {
-                    AppState.currentUser = null;
-                    MessageHandler.show('Logged out successfully');
-                    ViewManager.showLogin();
-                })
-                .fail(function() {
-                    // Still clear user and redirect on failure
-                    AppState.currentUser = null;
-                    ViewManager.showLogin();
-                });
+            // Use enhanced auth handler if available
+            if (window.authHandler && window.authHandler.logout) {
+                window.authHandler.logout();
+            } else {
+                // Fallback to original API call
+                API.logout()
+                    .done(function() {
+                        AppState.currentUser = null;
+                        MessageHandler.show('Logged out successfully');
+                        ViewManager.showLogin();
+                    })
+                    .fail(function() {
+                        // Still clear user and redirect on failure
+                        AppState.currentUser = null;
+                        ViewManager.showLogin();
+                    });
+            }
         },
 
         checkAuth: function() {
@@ -983,6 +1029,29 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
         }
         
         event.preventDefault();
+    };
+
+    // ==================== Global Utility Functions ====================
+    
+    // Make these functions available globally for auth handler
+    window.updateUserDisplay = function(user) {
+        if (user && user !== AppState.currentUser) {
+            AppState.currentUser = user;
+            // Refresh display if needed
+            if (ViewManager.currentView !== 'login') {
+                ViewManager.updateUserInfo();
+            }
+        }
+    };
+    
+    window.clearUserState = function() {
+        AppState.currentUser = null;
+        // Clear any cached data
+        AppState.courses = [];
+        AppState.students = [];
+        AppState.editingCourse = null;
+        AppState.viewingCourse = null;
+        AppState.assigningCourse = null;
     };
 
     // ==================== Initialize Application ====================

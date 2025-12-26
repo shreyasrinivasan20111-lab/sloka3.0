@@ -5,32 +5,32 @@
       "email": "admin@example.com",
       "role": "admin",
       "created_at": "2025-12-26 11:48:48.496000",
-      "backup_timestamp": "2025-12-26T12:34:34.968744"
+      "backup_timestamp": "2025-12-26T12:55:34.555468"
     },
     {
       "id": 2,
       "email": "student1@example.com",
       "role": "student",
       "created_at": "2025-12-26 11:48:48.496000",
-      "backup_timestamp": "2025-12-26T12:34:34.968756"
+      "backup_timestamp": "2025-12-26T12:55:34.555487"
     },
     {
       "id": 3,
       "email": "student2@example.com",
       "role": "student",
       "created_at": "2025-12-26 11:48:48.496000",
-      "backup_timestamp": "2025-12-26T12:34:34.968761"
+      "backup_timestamp": "2025-12-26T12:55:34.555495"
     },
     {
       "id": 4,
       "email": "shreya.srinivasan2011@gmail.com",
       "role": "student",
       "created_at": "2025-12-26 11:51:12.569000",
-      "backup_timestamp": "2025-12-26T12:34:34.968764"
+      "backup_timestamp": "2025-12-26T12:55:34.555499"
     }
   ],
   "total_count": 4,
-  "last_backup": "2025-12-26T12:34:34.968960",
+  "last_backup": "2025-12-26T12:55:34.555772",
   "backup_version": "1.0",
   "note": "Password hashes excluded for security"
 }

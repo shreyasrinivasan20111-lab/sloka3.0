@@ -115,6 +115,7 @@ def allowed_file(filename):
 
 @app.route('/api/login', methods=['POST'])
 def login():
+    """Enhanced login with serverless database persistence fixes"""
     try:
         data = request.json
         if not data:
@@ -130,11 +131,29 @@ def login():
             logger.warning(f"Login failed: Missing credentials | Email: {email}")
             return jsonify({'error': 'Email and password required'}), 400
 
+        # SERVERLESS FIX: Ensure database is initialized before auth
+        try:
+            from backend.database_unified import ensure_tables_exist
+            ensure_tables_exist()
+            logger.info("Database tables verified for login")
+        except Exception as db_error:
+            logger.error(f"Database initialization failed during login: {str(db_error)}")
+            return jsonify({'error': 'Service temporarily unavailable'}), 503
+
         user = verify_user(email, password)
         if user:
+            # Clear any existing session first
+            session.clear()
+            
             session['user_id'] = user['id']
             session['email'] = user['email']
             session['role'] = user['role']
+            session.permanent = True
+
+            # Verify session was set correctly (serverless protection)
+            if session.get('user_id') != user['id']:
+                logger.error(f"Session verification failed for {email}")
+                return jsonify({'error': 'Login failed due to session error'}), 500
 
             log_authentication('LOGIN', email, True)
             log_session_activity('START', f"User ID: {user['id']}, Role: {user['role']}")
@@ -159,6 +178,7 @@ def login():
 
 @app.route('/api/signup', methods=['POST'])
 def signup():
+    """Enhanced signup with serverless database persistence fixes"""
     try:
         data = request.json
         if not data:
@@ -178,6 +198,15 @@ def signup():
         if '@' not in email or '.' not in email:
             logger.warning(f"Signup failed: Invalid email format | Email: {email}")
             return jsonify({'error': 'Invalid email format'}), 400
+
+        # SERVERLESS FIX: Ensure database is initialized before any operations
+        try:
+            from backend.database_unified import ensure_tables_exist
+            ensure_tables_exist()
+            logger.info("Database tables verified for signup")
+        except Exception as db_error:
+            logger.error(f"Database initialization failed during signup: {str(db_error)}")
+            return jsonify({'error': 'Service temporarily unavailable'}), 503
 
         # Check if email already exists
         conn = get_connection()
@@ -216,12 +245,28 @@ def signup():
 
         # Get the new user ID
         user_id = conn.execute('SELECT MAX(id) FROM users').fetchone()[0]
+        
+        # SERVERLESS FIX: Force JSON backup immediately after signup
+        try:
+            from backend.json_storage import backup_all_to_json
+            backup_all_to_json()
+            logger.info(f"JSON backup completed after signup for {email}")
+        except Exception as backup_error:
+            logger.warning(f"JSON backup failed after signup: {str(backup_error)}")
+        
         conn.close()
 
-        # Auto-login after signup
+        # Clear any existing session first, then auto-login after signup
+        session.clear()
         session['user_id'] = user_id
         session['email'] = email
         session['role'] = 'student'
+        session.permanent = True
+
+        # Verify session was set correctly (serverless protection)
+        if session.get('user_id') != user_id:
+            logger.error(f"Session verification failed after signup for {email}")
+            return jsonify({'error': 'Account created but login failed'}), 500
 
         log_authentication('SIGNUP', email, True)
         log_session_activity('START', f"New student account | User ID: {user_id}")
@@ -263,7 +308,7 @@ def logout():
 
 @app.route('/api/check-auth', methods=['GET'])
 def check_auth():
-    """Check if user is authenticated - Ultra-robust version"""
+    """Check if user is authenticated - Ultra-robust version with serverless fixes"""
     response_data = {'authenticated': False}
     
     try:
@@ -351,6 +396,46 @@ def check_auth():
                     pass
                 return jsonify(response_data), 200
         except:
+            try:
+                session.clear()
+            except:
+                pass
+            return jsonify(response_data), 200
+        
+        # SERVERLESS FIX: Verify user still exists in database
+        # This is critical for serverless environments where DB might be recreated
+        try:
+            conn = get_connection()
+            db_user = conn.execute(
+                'SELECT id, email, role FROM users WHERE id = ? AND email = ?',
+                [user_id, email]
+            ).fetchone()
+            conn.close()
+            
+            if not db_user:
+                logger.warning(f"Session user not found in database (serverless restart?): {email} (ID: {user_id})")
+                try:
+                    session.clear()
+                except:
+                    pass
+                return jsonify({
+                    'authenticated': False,
+                    'error': 'session_invalid',
+                    'message': 'Session expired due to server restart. Please login again.'
+                }), 200
+                
+            # Verify role matches
+            if db_user[2].lower() != role:
+                logger.warning(f"Role mismatch for user {email}: session={role}, db={db_user[2]}")
+                try:
+                    session.clear()
+                except:
+                    pass
+                return jsonify(response_data), 200
+                
+        except Exception as e:
+            logger.error(f"Database check error during auth validation: {str(e)}")
+            # If DB check fails, clear session to be safe
             try:
                 session.clear()
             except:
