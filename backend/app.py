@@ -246,13 +246,20 @@ def signup():
         # Get the new user ID
         user_id = conn.execute('SELECT MAX(id) FROM users').fetchone()[0]
         
-        # SERVERLESS FIX: Force JSON backup immediately after signup
+        # SERVERLESS FIX: Force JSON backup immediately after signup with Vercel compatibility
         try:
-            from backend.json_storage import backup_all_to_json
-            backup_all_to_json()
-            logger.info(f"JSON backup completed after signup for {email}")
+            from backend.json_storage import backup_all_to_json, create_vercel_compatible_backup
+            if os.environ.get('VERCEL') == '1':
+                # Use Vercel-compatible backup with memory fallback
+                create_vercel_compatible_backup()
+                logger.info(f"Vercel-compatible backup completed after signup for {email}")
+            else:
+                # Use regular backup for local development
+                backup_all_to_json()
+                logger.info(f"JSON backup completed after signup for {email}")
         except Exception as backup_error:
             logger.warning(f"JSON backup failed after signup: {str(backup_error)}")
+            # Continue anyway - signup should still work even if backup fails
         
         conn.close()
 
@@ -1431,6 +1438,75 @@ def get_user_credentials_admin():
     except Exception as e:
         logger.error(f"Admin user credentials error: {str(e)}")
         return jsonify({'error': f'Failed to get user credentials: {str(e)}'}), 500
+
+@app.route('/api/admin/backup/test', methods=['GET'])
+@admin_required
+def test_backup_system():
+    """Test JSON backup system compatibility (admin only)"""
+    try:
+        results = {
+            'environment': 'vercel' if os.environ.get('VERCEL') == '1' else 'local',
+            'timestamp': time.time(),
+            'filesystem_tests': {},
+            'backup_tests': {},
+            'memory_backup_available': False
+        }
+        
+        # Test filesystem write permissions
+        test_locations = [
+            'json_backup/test.json',
+            '/tmp/test.json',
+            '/tmp/json_backup/test.json'
+        ]
+        
+        for location in test_locations:
+            try:
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(location), exist_ok=True)
+                
+                # Test write
+                with open(location, 'w') as f:
+                    json.dump({'test': True}, f)
+                
+                # Test read
+                with open(location, 'r') as f:
+                    json.load(f)
+                
+                # Clean up
+                os.remove(location)
+                
+                results['filesystem_tests'][location] = {'writable': True, 'error': None}
+                
+            except Exception as e:
+                results['filesystem_tests'][location] = {'writable': False, 'error': str(e)}
+        
+        # Test backup functions
+        from backend.json_storage import (
+            backup_users_to_json, 
+            create_vercel_compatible_backup,
+            has_memory_backup
+        )
+        
+        try:
+            success = backup_users_to_json()
+            results['backup_tests']['users_json'] = {'success': success, 'error': None}
+        except Exception as e:
+            results['backup_tests']['users_json'] = {'success': False, 'error': str(e)}
+        
+        try:
+            success = create_vercel_compatible_backup()
+            results['backup_tests']['vercel_compatible'] = {'success': success, 'error': None}
+        except Exception as e:
+            results['backup_tests']['vercel_compatible'] = {'success': False, 'error': str(e)}
+        
+        # Check memory backup
+        results['memory_backup_available'] = has_memory_backup('users')
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        logger.error(f"Backup system test error: {str(e)}")
+        return jsonify({'error': f'Test failed: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # Initialize database on startup
