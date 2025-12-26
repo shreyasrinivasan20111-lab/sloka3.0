@@ -143,6 +143,7 @@
 
             <div class="dashboard-actions">
                 <button id="create-course-btn" class="btn btn-primary">Create New Course</button>
+                <a href="/admin-data" class="btn btn-secondary" target="_blank">📊 View Data & Backups</a>
             </div>
 
             <div id="courses-loading" class="loading" style="display: none;">
@@ -198,8 +199,12 @@
                         <textarea id="course-description" rows="3"></textarea>
                     </div>
                     <div class="form-group">
-                        <label>Course Content</label>
-                        <div id="editor-container"></div>
+                        <label>Lyrics</label>
+                        <div id="lyrics-editor-container"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Audio Content</label>
+                        <div id="audio-editor-container"></div>
                     </div>
                     <div id="course-files-section" class="form-group" style="display: none;">
                         <label>Files</label>
@@ -225,7 +230,9 @@
             <div class="modal-body">
                 <p id="course-view-meta" class="course-meta"></p>
                 <div id="course-view-description" class="course-section"></div>
-                <div id="course-view-content" class="course-section"></div>
+                <div id="course-view-lyrics" class="course-section"></div>
+                <div id="course-view-audio" class="course-section"></div>
+                <div id="course-view-content" class="course-section" style="display: none;"></div>
                 <div id="course-view-files" class="course-section" style="display: none;">
                     <h3>Files</h3>
                     <div id="course-view-files-list" class="file-list"></div>

@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Data Viewer - Sloka Course Management</title>
+    
+    <!-- Import Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Nova+Round:wght@400&family=Limelight:wght@400&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Nova Round', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: repeating-linear-gradient(
+                90deg,
+                #C5A098 0px,
+                #C5A098 40px,
+                #B8927F 40px,
+                #B8927F 80px
+            );
+            min-height: 100vh;
+            color: #704f3b;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 248, 240, 0.95);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(112, 79, 59, 0.2);
+        }
+
+        .header h1 {
+            font-family: 'Limelight', cursive;
+            color: #704f3b;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .tabs {
+            display: flex;
+            background: rgba(255, 248, 240, 0.95);
+            border-radius: 10px 10px 0 0;
+            overflow: hidden;
+            margin-bottom: 0;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 15px 20px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 500;
+            color: #704f3b;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .tab-button:hover:not(.active) {
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .tab-content {
+            background: rgba(255, 248, 240, 0.95);
+            border-radius: 0 0 10px 10px;
+            padding: 20px;
+            min-height: 500px;
+            box-shadow: 0 4px 12px rgba(112, 79, 59, 0.2);
+        }
+
+        .tab-pane {
+            display: none;
+        }
+
+        .tab-pane.active {
+            display: block;
+        }
+
+        .data-section {
+            margin-bottom: 30px;
+        }
+
+        .data-section h3 {
+            font-family: 'Limelight', cursive;
+            color: #704f3b;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .data-table th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .data-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .json-viewer {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-x: auto;
+            margin-bottom: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .json-viewer pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            display: block;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .content-preview {
+            max-width: 300px;
+            max-height: 100px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+
+        .bg-primary {
+            background-color: #667eea;
+            color: white;
+        }
+
+        .bg-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .backup-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .tabs {
+                flex-direction: column;
+            }
+            
+            .backup-actions {
+                flex-direction: column;
+            }
+            
+            .nav-buttons {
+                flex-direction: column;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Admin Data Viewer</h1>
+            <div class="nav-buttons">
+                <a href="/" class="btn btn-secondary">← Back to Dashboard</a>
+                <button id="refresh-btn" class="btn btn-primary">🔄 Refresh Data</button>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-button active" data-tab="database">Database Data</button>
+            <button class="tab-button" data-tab="json">JSON Backups</button>
+            <button class="tab-button" data-tab="status">System Status</button>
+        </div>
+
+        <div class="tab-content">
+            <!-- Database Data Tab -->
+            <div id="database-tab" class="tab-pane active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number" id="users-count">-</span>
+                        <span class="stat-label">Users</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="courses-count">-</span>
+                        <span class="stat-label">Courses</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="assignments-count">-</span>
+                        <span class="stat-label">Assignments</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="files-count">-</span>
+                        <span class="stat-label">Files</span>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h3>Users</h3>
+                    <div id="users-table-container">
+                        <div class="loading">Loading users...</div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h3>Courses</h3>
+                    <div id="courses-table-container">
+                        <div class="loading">Loading courses...</div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h3>Course Assignments</h3>
+                    <div id="assignments-table-container">
+                        <div class="loading">Loading assignments...</div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h3>Files</h3>
+                    <div id="files-table-container">
+                        <div class="loading">Loading files...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- JSON Backups Tab -->
+            <div id="json-tab" class="tab-pane">
+                <div class="backup-actions">
+                    <button id="backup-all-btn" class="btn btn-success">📁 Backup All Data</button>
+                    <button id="backup-courses-btn" class="btn btn-warning">📚 Backup Courses Only</button>
+                </div>
+
+                <div id="backup-status"></div>
+
+                <div class="data-section">
+                    <h3>Courses JSON Backup</h3>
+                    <div id="courses-json-container">
+                        <div class="loading">Loading courses JSON...</div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h3>Users JSON Backup</h3>
+                    <div id="users-json-container">
+                        <div class="loading">Loading users JSON...</div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h3>Assignments JSON Backup</h3>
+                    <div id="assignments-json-container">
+                        <div class="loading">Loading assignments JSON...</div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h3>Files JSON Backup</h3>
+                    <div id="files-json-container">
+                        <div class="loading">Loading files JSON...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Status Tab -->
+            <div id="status-tab" class="tab-pane">
+                <div class="data-section">
+                    <h3>Database Status</h3>
+                    <div id="db-status-container">
+                        <div class="loading">Loading database status...</div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h3>JSON Backup Status</h3>
+                    <div id="json-status-container">
+                        <div class="loading">Loading JSON backup status...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    
+    <script>
+        // Tab functionality
+        $('.tab-button').click(function() {
+            const tabName = $(this).data('tab');
+            
+            // Update active tab button
+            $('.tab-button').removeClass('active');
+            $(this).addClass('active');
+            
+            // Show corresponding tab pane
+            $('.tab-pane').removeClass('active');
+            $(`#${tabName}-tab`).addClass('active');
+            
+            // Load data for the selected tab
+            if (tabName === 'database') {
+                loadDatabaseData();
+            } else if (tabName === 'json') {
+                loadJsonData();
+            } else if (tabName === 'status') {
+                loadSystemStatus();
+            }
+        });
+
+        // Refresh button
+        $('#refresh-btn').click(function() {
+            const activeTab = $('.tab-button.active').data('tab');
+            if (activeTab === 'database') {
+                loadDatabaseData();
+            } else if (activeTab === 'json') {
+                loadJsonData();
+            } else if (activeTab === 'status') {
+                loadSystemStatus();
+            }
+        });
+
+        // Backup buttons
+        $('#backup-all-btn').click(function() {
+            backupAllData();
+        });
+
+        $('#backup-courses-btn').click(function() {
+            backupCoursesData();
+        });
+
+        // Load database data
+        function loadDatabaseData() {
+            // Load users
+            $.get('/api/admin/data/users').done(function(data) {
+                displayUsersTable(data.users);
+                $('#users-count').text(data.users.length);
+            }).fail(function() {
+                $('#users-table-container').html('<div class="error">Failed to load users data</div>');
+            });
+
+            // Load courses
+            $.get('/api/courses').done(function(data) {
+                displayCoursesTable(data.courses);
+                $('#courses-count').text(data.courses.length);
+            }).fail(function() {
+                $('#courses-table-container').html('<div class="error">Failed to load courses data</div>');
+            });
+
+            // Load assignments
+            $.get('/api/admin/data/assignments').done(function(data) {
+                displayAssignmentsTable(data.assignments);
+                $('#assignments-count').text(data.assignments.length);
+            }).fail(function() {
+                $('#assignments-table-container').html('<div class="error">Failed to load assignments data</div>');
+            });
+
+            // Load files
+            $.get('/api/admin/data/files').done(function(data) {
+                displayFilesTable(data.files);
+                $('#files-count').text(data.files.length);
+            }).fail(function() {
+                $('#files-table-container').html('<div class="error">Failed to load files data</div>');
+            });
+        }
+
+        // Load JSON data
+        function loadJsonData() {
+            // Load JSON backup status first
+            $.get('/api/backup/json/status').done(function(data) {
+                displayJsonStatus(data);
+            });
+
+            // Load each JSON file
+            const jsonFiles = ['courses.json', 'users.json', 'assignments.json', 'files.json'];
+            jsonFiles.forEach(filename => {
+                const containerName = filename.replace('.json', '');
+                $(`#${containerName}-json-container`).html('<div class="loading">Loading...</div>');
+                
+                $.get(`/api/admin/json/${containerName}`).done(function(data) {
+                    const jsonViewer = `
+                        <div class="json-viewer">
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                    $(`#${containerName}-json-container`).html(jsonViewer);
+                }).fail(function() {
+                    $(`#${containerName}-json-container`).html('<div class="error">Failed to load JSON data</div>');
+                });
+            });
+        }
+
+        // Load system status
+        function loadSystemStatus() {
+            // Database status
+            $.get('/api/db-status').done(function(data) {
+                displayDatabaseStatus(data);
+            }).fail(function() {
+                $('#db-status-container').html('<div class="error">Failed to load database status</div>');
+            });
+
+            // JSON backup status
+            $.get('/api/backup/json/status').done(function(data) {
+                displayJsonBackupStatus(data);
+            }).fail(function() {
+                $('#json-status-container').html('<div class="error">Failed to load JSON backup status</div>');
+            });
+        }
+
+        // Display functions
+        function displayUsersTable(users) {
+            let html = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Created At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            users.forEach(user => {
+                html += `
+                    <tr>
+                        <td>${user.id}</td>
+                        <td>${user.email}</td>
+                        <td><span class="badge ${user.role === 'admin' ? 'bg-primary' : 'bg-secondary'}">${user.role}</span></td>
+                        <td>${user.created_at || 'N/A'}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            $('#users-table-container').html(html);
+        }
+
+        function displayCoursesTable(courses) {
+            let html = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Title</th>
+                            <th>Description</th>
+                            <th>Lyrics Preview</th>
+                            <th>Audio Preview</th>
+                            <th>Created At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            courses.forEach(course => {
+                const lyricsPreview = course.lyrics ? course.lyrics.substring(0, 100) + '...' : 'No lyrics';
+                const audioPreview = course.audio ? course.audio.substring(0, 100) + '...' : 'No audio';
+                
+                html += `
+                    <tr>
+                        <td>${course.id}</td>
+                        <td>${course.title}</td>
+                        <td>${course.description || 'No description'}</td>
+                        <td><div class="content-preview" title="${course.lyrics || ''}">${lyricsPreview}</div></td>
+                        <td><div class="content-preview" title="${course.audio || ''}">${audioPreview}</div></td>
+                        <td>${course.created_at}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            $('#courses-table-container').html(html);
+        }
+
+        function displayAssignmentsTable(assignments) {
+            let html = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Student Email</th>
+                            <th>Course Title</th>
+                            <th>User ID</th>
+                            <th>Course ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            assignments.forEach(assignment => {
+                html += `
+                    <tr>
+                        <td>${assignment.id}</td>
+                        <td>${assignment.user_email}</td>
+                        <td>${assignment.course_title}</td>
+                        <td>${assignment.user_id}</td>
+                        <td>${assignment.course_id}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            $('#assignments-table-container').html(html);
+        }
+
+        function displayFilesTable(files) {
+            let html = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Filename</th>
+                            <th>Course</th>
+                            <th>File Path</th>
+                            <th>Size (MB)</th>
+                            <th>Exists</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            files.forEach(file => {
+                const sizeInMB = file.file_size_bytes ? (file.file_size_bytes / (1024 * 1024)).toFixed(2) : 'N/A';
+                const existsIcon = file.file_exists ? '✅' : '❌';
+                
+                html += `
+                    <tr>
+                        <td>${file.id}</td>
+                        <td>${file.filename}</td>
+                        <td>${file.course_title}</td>
+                        <td>${file.file_path}</td>
+                        <td>${sizeInMB}</td>
+                        <td>${existsIcon}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            $('#files-table-container').html(html);
+        }
+
+        function displayJsonStatus(data) {
+            // This will be shown in the backup actions area
+        }
+
+        function displayDatabaseStatus(data) {
+            const html = `
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <p><strong>Database Type:</strong> ${data.database_type}</p>
+                    <p><strong>Database Path:</strong> ${data.database_path}</p>
+                    <p><strong>Database Size:</strong> ${data.database_size}</p>
+                    <p><strong>Data Persistent:</strong> ${data.data_persistent ? '✅ Yes' : '❌ No'}</p>
+                    <p><strong>Status:</strong> ${data.status}</p>
+                    <h4>Statistics:</h4>
+                    <ul>
+                        <li>Users: ${data.statistics.users}</li>
+                        <li>Courses: ${data.statistics.courses}</li>
+                        <li>Assignments: ${data.statistics.assignments}</li>
+                        <li>Files: ${data.statistics.files}</li>
+                    </ul>
+                </div>
+            `;
+            $('#db-status-container').html(html);
+        }
+
+        function displayJsonBackupStatus(data) {
+            let html = '<div style="background: white; padding: 20px; border-radius: 8px;">';
+            html += `<p><strong>Backup Directory:</strong> ${data.backup_directory}</p>`;
+            html += `<p><strong>Directory Exists:</strong> ${data.backup_directory_exists ? '✅ Yes' : '❌ No'}</p>`;
+            
+            html += '<h4>Backup Files:</h4><table class="data-table" style="margin-top: 10px;"><thead><tr><th>File</th><th>Exists</th><th>Size</th><th>Records</th><th>Last Modified</th></tr></thead><tbody>';
+            
+            Object.keys(data.files).forEach(filename => {
+                const file = data.files[filename];
+                html += `
+                    <tr>
+                        <td>${filename}</td>
+                        <td>${file.exists ? '✅' : '❌'}</td>
+                        <td>${file.size_bytes ? (file.size_bytes / 1024).toFixed(1) + ' KB' : 'N/A'}</td>
+                        <td>${file.record_count}</td>
+                        <td>${file.last_modified ? new Date(file.last_modified).toLocaleString() : 'N/A'}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table></div>';
+            $('#json-status-container').html(html);
+        }
+
+        function backupAllData() {
+            $('#backup-status').html('<div class="loading">Backing up all data...</div>');
+            $.post('/api/backup/json/all').done(function(data) {
+                $('#backup-status').html('<div class="success">' + data.message + '</div>');
+                setTimeout(() => $('#backup-status').html(''), 5000);
+                loadJsonData(); // Reload JSON data
+            }).fail(function(xhr) {
+                const error = xhr.responseJSON ? xhr.responseJSON.error : 'Backup failed';
+                $('#backup-status').html('<div class="error">' + error + '</div>');
+            });
+        }
+
+        function backupCoursesData() {
+            $('#backup-status').html('<div class="loading">Backing up courses...</div>');
+            $.post('/api/backup/json/courses').done(function(data) {
+                $('#backup-status').html('<div class="success">' + data.message + '</div>');
+                setTimeout(() => $('#backup-status').html(''), 5000);
+                loadJsonData(); // Reload JSON data
+            }).fail(function(xhr) {
+                const error = xhr.responseJSON ? xhr.responseJSON.error : 'Backup failed';
+                $('#backup-status').html('<div class="error">' + error + '</div>');
+            });
+        }
+
+        // Initialize page
+        $(document).ready(function() {
+            // Check if user is admin
+            $.get('/api/check-auth').done(function(data) {
+                if (!data.authenticated || data.user.role !== 'admin') {
+                    window.location.href = '/';
+                    return;
+                }
+                
+                // Load initial data
+                loadDatabaseData();
+            }).fail(function() {
+                window.location.href = '/';
+            });
+        });
+    </script>
+</body>
+</html>

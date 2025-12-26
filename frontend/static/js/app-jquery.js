@@ -14,6 +14,8 @@
         courses: [],
         students: [],
         quillEditor: null,
+        lyricsEditor: null,
+        audioEditor: null,
         editingCourse: null,
         viewingCourse: null,
         assigningCourse: null
@@ -527,8 +529,12 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
                     $('#course-title').val(course.title);
                     $('#course-description').val(course.description);
 
-                    if (AppState.quillEditor) {
-                        AppState.quillEditor.root.innerHTML = course.content || '';
+                    if (AppState.lyricsEditor) {
+                        AppState.lyricsEditor.root.innerHTML = course.lyrics || course.content_richtext || '';
+                    }
+                    
+                    if (AppState.audioEditor) {
+                        AppState.audioEditor.root.innerHTML = course.audio || '';
                     }
 
                     // Load and show files
@@ -543,16 +549,34 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
                 // Creating new course
                 $('#course-editor-title-text').text('Create Course');
                 $('#course-editor-form')[0].reset();
-                if (AppState.quillEditor) {
-                    AppState.quillEditor.root.innerHTML = '';
+                if (AppState.lyricsEditor) {
+                    AppState.lyricsEditor.root.innerHTML = '';
+                }
+                if (AppState.audioEditor) {
+                    AppState.audioEditor.root.innerHTML = '';
                 }
                 $('#course-files-list').empty();
                 $('#course-files-section').hide();
             }
 
-            // Initialize Quill if not already
-            if (!AppState.quillEditor && window.Quill) {
-                AppState.quillEditor = new Quill('#editor-container', {
+            // Initialize Quill editors if not already
+            if (!AppState.lyricsEditor && window.Quill) {
+                AppState.lyricsEditor = new Quill('#lyrics-editor-container', {
+                    theme: 'snow',
+                    modules: {
+                        toolbar: [
+                            [{ 'header': [1, 2, 3, false] }],
+                            ['bold', 'italic', 'underline'],
+                            ['link'],
+                            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                            ['clean']
+                        ]
+                    }
+                });
+            }
+            
+            if (!AppState.audioEditor && window.Quill) {
+                AppState.audioEditor = new Quill('#audio-editor-container', {
                     theme: 'snow',
                     modules: {
                         toolbar: [
@@ -564,6 +588,11 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
                         ]
                     }
                 });
+            }
+            
+            // Keep old quillEditor for backward compatibility with content_richtext
+            if (!AppState.quillEditor && AppState.lyricsEditor) {
+                AppState.quillEditor = AppState.lyricsEditor;
             }
 
             $('#course-editor-modal').fadeIn(300);
@@ -577,14 +606,16 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
         saveCourse: function() {
             const title = $('#course-title').val().trim();
             const description = $('#course-description').val().trim();
-            const content = AppState.quillEditor ? AppState.quillEditor.root.innerHTML : '';
+            const content_richtext = AppState.quillEditor ? AppState.quillEditor.root.innerHTML : '';
+            const lyrics = AppState.lyricsEditor ? AppState.lyricsEditor.root.innerHTML : '';
+            const audio = AppState.audioEditor ? AppState.audioEditor.root.innerHTML : '';
 
             if (!title) {
                 ErrorHandler.show({ message: 'Course title is required', type: 'Validation Error' });
                 return;
             }
 
-            const courseData = { title, description, content };
+            const courseData = { title, description, content_richtext, lyrics, audio };
             const $btn = $('#save-course-btn');
             $btn.prop('disabled', true).text('Saving...');
 
@@ -643,8 +674,21 @@ ${this.currentError.stack ? `Stack Trace:\n${this.currentError.stack}` : ''}
                         $('#course-view-description').hide();
                     }
 
-                    if (course.content) {
-                        $('#course-view-content').html(`<h3>Content</h3><div class="course-content">${course.content}</div>`).show();
+                    if (course.lyrics) {
+                        $('#course-view-lyrics').html(`<h3>Lyrics</h3><div class="course-content">${course.lyrics}</div>`).show();
+                    } else {
+                        $('#course-view-lyrics').hide();
+                    }
+
+                    if (course.audio) {
+                        $('#course-view-audio').html(`<h3>Audio Content</h3><div class="course-content">${course.audio}</div>`).show();
+                    } else {
+                        $('#course-view-audio').hide();
+                    }
+
+                    // Keep backward compatibility with content_richtext
+                    if (course.content_richtext && !course.lyrics && !course.audio) {
+                        $('#course-view-content').html(`<h3>Content</h3><div class="course-content">${course.content_richtext}</div>`).show();
                     } else {
                         $('#course-view-content').hide();
                     }

@@ -11,6 +11,38 @@ def get_connection():
     """Get a connection to the DuckDB database"""
     return duckdb.connect(get_db_path())
 
+def run_migrations(conn):
+    """Run database migrations to update schema"""
+    try:
+        # Check if lyrics and audio columns exist
+        columns_info = conn.execute("PRAGMA table_info(courses)").fetchall()
+        existing_columns = [col[1] for col in columns_info]
+        
+        # Migration 1: Add lyrics and audio columns if they don't exist
+        if 'lyrics' not in existing_columns:
+            conn.execute('ALTER TABLE courses ADD COLUMN lyrics TEXT')
+            print("Migration: Added 'lyrics' column to courses table")
+            
+        if 'audio' not in existing_columns:
+            conn.execute('ALTER TABLE courses ADD COLUMN audio TEXT') 
+            print("Migration: Added 'audio' column to courses table")
+            
+        # Migration 2: Copy content_richtext to lyrics if lyrics is empty
+        if 'content_richtext' in existing_columns and 'lyrics' in existing_columns:
+            # Copy existing content_richtext to lyrics for courses that don't have lyrics yet
+            conn.execute('''
+                UPDATE courses 
+                SET lyrics = content_richtext 
+                WHERE lyrics IS NULL AND content_richtext IS NOT NULL
+            ''')
+            print("Migration: Copied existing content to lyrics column")
+        
+        conn.commit()
+        
+    except Exception as e:
+        print(f"Migration error (non-critical): {e}")
+        # Don't fail the entire initialization if migrations have issues
+
 def init_database():
     """Initialize the database with tables and sample data"""
     import os
@@ -22,6 +54,9 @@ def init_database():
     database_exists = os.path.exists(db_path)
     
     conn = get_connection()
+    
+    # Run database migrations first
+    run_migrations(conn)
     
     # Always create tables if they don't exist (safe operation)
     # Create users table
@@ -42,6 +77,8 @@ def init_database():
             title VARCHAR NOT NULL,
             description VARCHAR,
             content_richtext TEXT,
+            lyrics TEXT,
+            audio TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')

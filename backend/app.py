@@ -3,6 +3,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
 import time
+import json
 from backend.database_unified import get_connection, init_database, use_postgres
 from backend.auth import login_required, admin_required, verify_user, get_current_user
 from backend.config import get_config
@@ -16,6 +17,13 @@ from backend.logger import (
     log_assignment_operation,
     log_session_activity,
     get_user_info
+)
+from backend.json_storage import (
+    backup_courses_to_json,
+    backup_all_to_json,
+    get_json_backup_status,
+    sync_course_to_json,
+    backup_assignments_to_json
 )
 
 # Get configuration
@@ -186,10 +194,24 @@ def signup():
         hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
 
         log_database_operation('INSERT', 'users', f'New student account: {email}')
-        conn.execute('''
-            INSERT INTO users (id, email, hashed_password, role)
-            VALUES (nextval('users_id_seq'), ?, ?, 'student')
-        ''', [email, hashed_password])
+        
+        # Check if we're using PostgreSQL or DuckDB for proper ID handling
+        from backend.database_unified import use_postgres
+        if use_postgres():
+            conn.execute('''
+                INSERT INTO users (id, email, hashed_password, role)
+                VALUES (nextval('users_id_seq'), ?, ?, 'student')
+            ''', [email, hashed_password])
+        else:
+            # DuckDB - calculate next ID manually
+            max_id_result = conn.execute('SELECT COALESCE(MAX(id), 0) FROM users').fetchone()
+            next_id = (max_id_result[0] if max_id_result else 0) + 1
+            
+            conn.execute('''
+                INSERT INTO users (id, email, hashed_password, role)
+                VALUES (?, ?, ?, 'student')
+            ''', [next_id, email, hashed_password])
+        
         conn.commit()
 
         # Get the new user ID
@@ -573,6 +595,203 @@ def get_me():
     user = get_current_user()
     return jsonify({'user': user})
 
+# ============= JSON Backup Endpoints =============
+
+@app.route('/api/backup/json/status', methods=['GET'])
+@admin_required
+def get_json_backup_status_endpoint():
+    """Get status of JSON backup files (admin only)"""
+    try:
+        status = get_json_backup_status()
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"JSON backup status error: {str(e)}")
+        return jsonify({'error': f'Failed to get JSON backup status: {str(e)}'}), 500
+
+@app.route('/api/backup/json/courses', methods=['POST'])
+@admin_required
+def backup_courses_json_endpoint():
+    """Manually backup courses to JSON (admin only)"""
+    try:
+        success = backup_courses_to_json()
+        if success:
+            return jsonify({
+                'message': 'Courses backed up to JSON successfully',
+                'timestamp': time.time()
+            })
+        else:
+            return jsonify({'error': 'Failed to backup courses to JSON'}), 500
+    except Exception as e:
+        logger.error(f"JSON courses backup error: {str(e)}")
+        return jsonify({'error': f'Failed to backup courses: {str(e)}'}), 500
+
+@app.route('/api/backup/json/all', methods=['POST'])
+@admin_required
+def backup_all_json_endpoint():
+    """Manually backup all data to JSON (admin only)"""
+    try:
+        success = backup_all_to_json()
+        if success:
+            return jsonify({
+                'message': 'All data backed up to JSON successfully',
+                'timestamp': time.time()
+            })
+        else:
+            return jsonify({'error': 'Some JSON backups failed - check logs'}), 500
+    except Exception as e:
+        logger.error(f"JSON full backup error: {str(e)}")
+        return jsonify({'error': f'Failed to backup all data: {str(e)}'}), 500
+
+@app.route('/api/backup/json/download/<filename>', methods=['GET'])
+@admin_required
+def download_json_backup(filename):
+    """Download JSON backup file (admin only)"""
+    try:
+        # Validate filename for security
+        allowed_files = ['courses.json', 'users.json', 'assignments.json', 'files.json']
+        if filename not in allowed_files:
+            return jsonify({'error': 'Invalid backup file requested'}), 400
+        
+        from backend.json_storage import get_json_file_path
+        file_path = get_json_file_path(filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'Backup file not found'}), 404
+        
+        return send_file(
+            file_path, 
+            as_attachment=True, 
+            download_name=f"backup_{filename}",
+            mimetype='application/json'
+        )
+        
+    except Exception as e:
+        logger.error(f"JSON backup download error: {str(e)}")
+        return jsonify({'error': f'Failed to download backup: {str(e)}'}), 500
+
+# ============= Admin Data Viewer Endpoints =============
+
+@app.route('/api/admin/data/users', methods=['GET'])
+@admin_required
+def get_all_users_admin():
+    """Get all users for admin data viewer (admin only)"""
+    try:
+        conn = get_connection()
+        users = conn.execute('''
+            SELECT id, email, role, created_at
+            FROM users
+            ORDER BY id
+        ''').fetchall()
+        
+        result = []
+        for user in users:
+            result.append({
+                'id': user[0],
+                'email': user[1],
+                'role': user[2],
+                'created_at': str(user[3]) if user[3] else None
+            })
+        
+        conn.close()
+        return jsonify({'users': result})
+        
+    except Exception as e:
+        logger.error(f"Admin users data error: {str(e)}")
+        return jsonify({'error': f'Failed to get users data: {str(e)}'}), 500
+
+@app.route('/api/admin/data/assignments', methods=['GET'])
+@admin_required
+def get_all_assignments_admin():
+    """Get all assignments for admin data viewer (admin only)"""
+    try:
+        conn = get_connection()
+        assignments = conn.execute('''
+            SELECT ac.id, ac.user_id, ac.course_id, u.email, c.title
+            FROM assigned_courses ac
+            JOIN users u ON ac.user_id = u.id
+            JOIN courses c ON ac.course_id = c.id
+            ORDER BY ac.id
+        ''').fetchall()
+        
+        result = []
+        for assignment in assignments:
+            result.append({
+                'id': assignment[0],
+                'user_id': assignment[1],
+                'course_id': assignment[2],
+                'user_email': assignment[3],
+                'course_title': assignment[4]
+            })
+        
+        conn.close()
+        return jsonify({'assignments': result})
+        
+    except Exception as e:
+        logger.error(f"Admin assignments data error: {str(e)}")
+        return jsonify({'error': f'Failed to get assignments data: {str(e)}'}), 500
+
+@app.route('/api/admin/data/files', methods=['GET'])
+@admin_required
+def get_all_files_admin():
+    """Get all files for admin data viewer (admin only)"""
+    try:
+        conn = get_connection()
+        files = conn.execute('''
+            SELECT f.id, f.course_id, f.filename, f.file_path, c.title
+            FROM files f
+            JOIN courses c ON f.course_id = c.id
+            ORDER BY f.id
+        ''').fetchall()
+        
+        result = []
+        for file in files:
+            # Check if file exists and get size
+            file_exists = os.path.exists(file[3]) if file[3] else False
+            file_size = os.path.getsize(file[3]) if file_exists else 0
+            
+            result.append({
+                'id': file[0],
+                'course_id': file[1],
+                'filename': file[2],
+                'file_path': file[3],
+                'course_title': file[4],
+                'file_exists': file_exists,
+                'file_size_bytes': file_size
+            })
+        
+        conn.close()
+        return jsonify({'files': result})
+        
+    except Exception as e:
+        logger.error(f"Admin files data error: {str(e)}")
+        return jsonify({'error': f'Failed to get files data: {str(e)}'}), 500
+
+@app.route('/api/admin/json/<filename>', methods=['GET'])
+@admin_required
+def get_json_data_admin(filename):
+    """Get JSON backup data for admin viewer (admin only)"""
+    try:
+        # Validate filename
+        allowed_files = ['courses', 'users', 'assignments', 'files']
+        if filename not in allowed_files:
+            return jsonify({'error': 'Invalid JSON file requested'}), 400
+        
+        from backend.json_storage import get_json_file_path
+        json_filename = f"{filename}.json"
+        file_path = get_json_file_path(json_filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'error': f'JSON file {json_filename} not found'}), 404
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        return jsonify(data)
+        
+    except Exception as e:
+        logger.error(f"Admin JSON data error: {str(e)}")
+        return jsonify({'error': f'Failed to get JSON data: {str(e)}'}), 500
+
 # ============= Course Endpoints =============
 
 @app.route('/api/courses', methods=['GET'])
@@ -584,14 +803,14 @@ def get_courses():
     if session.get('role') == 'admin':
         # Admin sees all courses
         courses = conn.execute('''
-            SELECT c.id, c.title, c.description, c.content_richtext, c.created_at
+            SELECT c.id, c.title, c.description, c.content_richtext, c.lyrics, c.audio, c.created_at
             FROM courses c
             ORDER BY c.created_at DESC
         ''').fetchall()
     else:
         # Students see only assigned courses
         courses = conn.execute('''
-            SELECT c.id, c.title, c.description, c.content_richtext, c.created_at
+            SELECT c.id, c.title, c.description, c.content_richtext, c.lyrics, c.audio, c.created_at
             FROM courses c
             JOIN assigned_courses ac ON c.id = ac.course_id
             WHERE ac.user_id = ?
@@ -612,7 +831,9 @@ def get_courses():
             'title': course[1],
             'description': course[2],
             'content_richtext': course[3],
-            'created_at': str(course[4]),
+            'lyrics': course[4],
+            'audio': course[5],
+            'created_at': str(course[6]),
             'files': [{'id': f[0], 'filename': f[1], 'file_path': f[2]} for f in files]
         })
 
@@ -637,7 +858,7 @@ def get_course(course_id):
             return jsonify({'error': 'Access denied'}), 403
 
     course = conn.execute('''
-        SELECT id, title, description, content_richtext, created_at
+        SELECT id, title, description, content_richtext, lyrics, audio, created_at
         FROM courses
         WHERE id = ?
     ''', [course_id]).fetchone()
@@ -657,7 +878,9 @@ def get_course(course_id):
         'title': course[1],
         'description': course[2],
         'content_richtext': course[3],
-        'created_at': str(course[4]),
+        'lyrics': course[4],
+        'audio': course[5],
+        'created_at': str(course[6]),
         'files': [{'id': f[0], 'filename': f[1], 'file_path': f[2]} for f in files]
     }
 
@@ -672,8 +895,11 @@ def create_course():
     title = data.get('title')
     description = data.get('description', '')
     content_richtext = data.get('content_richtext', '')
+    lyrics = data.get('lyrics', '')
+    audio = data.get('audio', '')
 
     logger.info(f"Creating new course | Title: {title}")
+    logger.info(f"Course creation data: title='{title}', description='{description}', content_richtext='{content_richtext[:100] if content_richtext else None}', lyrics='{lyrics[:100] if lyrics else None}', audio='{audio[:100] if audio else None}'")
 
     if not title:
         logger.warning(f"Course creation failed: Title required")
@@ -681,15 +907,35 @@ def create_course():
 
     conn = get_connection()
     log_database_operation('INSERT', 'courses', f'Title: {title}')
-    conn.execute('''
-        INSERT INTO courses (id, title, description, content_richtext)
-        VALUES (nextval('courses_id_seq'), ?, ?, ?)
-    ''', [title, description, content_richtext])
+    
+    # Check if we're using PostgreSQL or DuckDB for proper ID handling
+    from backend.database_unified import use_postgres
+    if use_postgres():
+        conn.execute('''
+            INSERT INTO courses (id, title, description, content_richtext, lyrics, audio)
+            VALUES (nextval('courses_id_seq'), ?, ?, ?, ?, ?)
+        ''', [title, description, content_richtext, lyrics, audio])
+        course_id = conn.execute('SELECT MAX(id) FROM courses').fetchone()[0]
+    else:
+        # DuckDB - calculate next ID manually
+        max_id_result = conn.execute('SELECT COALESCE(MAX(id), 0) FROM courses').fetchone()
+        next_id = (max_id_result[0] if max_id_result else 0) + 1
+        
+        conn.execute('''
+            INSERT INTO courses (id, title, description, content_richtext, lyrics, audio)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', [next_id, title, description, content_richtext, lyrics, audio])
+        course_id = next_id
+    
     conn.commit()
-
-    # Get the newly created course ID
-    course_id = conn.execute('SELECT MAX(id) FROM courses').fetchone()[0]
     conn.close()
+
+    # Backup to JSON after successful database operation
+    try:
+        sync_course_to_json(course_id)
+        logger.info(f"Course {course_id} synced to JSON backup")
+    except Exception as e:
+        logger.warning(f"JSON backup failed for course {course_id}: {str(e)}")
 
     log_course_operation('CREATE', course_id, title)
     logger.info(f"✓ Course created successfully | ID: {course_id} | Title: {title}")
@@ -704,8 +950,11 @@ def update_course(course_id):
     title = data.get('title')
     description = data.get('description')
     content_richtext = data.get('content_richtext')
+    lyrics = data.get('lyrics')
+    audio = data.get('audio')
 
     logger.info(f"Updating course | ID: {course_id} | New title: {title}")
+    logger.info(f"Course update data: title='{title}', description='{description}', content_richtext='{content_richtext[:100] if content_richtext else None}', lyrics='{lyrics[:100] if lyrics else None}', audio='{audio[:100] if audio else None}'")
 
     conn = get_connection()
 
@@ -718,15 +967,49 @@ def update_course(course_id):
         return jsonify({'error': 'Course not found'}), 404
 
     log_database_operation('UPDATE', 'courses', f'Course ID: {course_id}')
-    conn.execute('''
-        UPDATE courses
-        SET title = ?, description = ?, content_richtext = ?
-        WHERE id = ?
-    ''', [title, description, content_richtext, course_id])
-    conn.commit()
-    conn.close()
+    logger.info(f"Executing UPDATE with title='{title}', description='{description}', content_richtext length={len(content_richtext or '')}, lyrics length={len(lyrics or '')}, audio length={len(audio or '')}")
+    
+    try:
+        # Execute the update
+        result = conn.execute('''
+            UPDATE courses
+            SET title = ?, description = ?, content_richtext = ?, lyrics = ?, audio = ?
+            WHERE id = ?
+        ''', [title, description, content_richtext, lyrics, audio, course_id])
+        
+        # Log number of rows affected
+        rows_affected = result.rowcount if hasattr(result, 'rowcount') else "unknown"
+        logger.info(f"Database UPDATE executed | Rows affected: {rows_affected}")
+        
+        # Commit the transaction
+        conn.commit()
+        logger.info(f"Database COMMIT executed")
+        
+        # Verify the update by reading back the data
+        verify_result = conn.execute('SELECT title, description, content_richtext, lyrics, audio FROM courses WHERE id = ?', [course_id]).fetchone()
+        if verify_result:
+            logger.info(f"Verification: title='{verify_result[0]}', description='{verify_result[1]}', content_richtext length={len(verify_result[2] or '')}, lyrics length={len(verify_result[3] or '')}, audio length={len(verify_result[4] or '')}")
+        else:
+            logger.error(f"Verification failed: Course {course_id} not found after update")
+        
+        conn.close()
+        logger.info(f"Database connection closed")
+        
+    except Exception as e:
+        logger.error(f"Database update failed: {str(e)}")
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': 'Failed to update course'}), 500
+
+    # Backup to JSON after successful database operation
+    try:
+        sync_course_to_json(course_id)
+        logger.info(f"Course {course_id} synced to JSON backup")
+    except Exception as e:
+        logger.warning(f"JSON backup failed for course {course_id}: {str(e)}")
 
     log_course_operation('UPDATE', course_id, title)
+    logger.info(f"✓ Course updated successfully | ID: {course_id} | Title: {title}")
     logger.info(f"✓ Course updated successfully | ID: {course_id} | Title: {title}")
 
     return jsonify({'message': 'Course updated'})
@@ -775,6 +1058,13 @@ def delete_course(course_id):
         
         conn.commit()
         conn.close()
+
+        # Backup to JSON after successful database operation
+        try:
+            sync_course_to_json(course_id)
+            logger.info(f"Course deletion synced to JSON backup")
+        except Exception as e:
+            logger.warning(f"JSON backup failed after course deletion: {str(e)}")
 
         log_course_operation('DELETE', course_id)
         logger.info(f"✓ Course deleted successfully | ID: {course_id} | Title: {course[0]}")
@@ -844,16 +1134,37 @@ def assign_course(course_id):
     for student_id in student_ids:
         try:
             log_database_operation('INSERT', 'assigned_courses', f'Student: {student_id}, Course: {course_id}')
-            conn.execute('''
-                INSERT INTO assigned_courses (id, user_id, course_id)
-                VALUES (nextval('assigned_courses_id_seq'), ?, ?)
-            ''', [student_id, course_id])
+            
+            # Check if we're using PostgreSQL or DuckDB for proper ID handling
+            from backend.database_unified import use_postgres
+            if use_postgres():
+                conn.execute('''
+                    INSERT INTO assigned_courses (id, user_id, course_id)
+                    VALUES (nextval('assigned_courses_id_seq'), ?, ?)
+                ''', [student_id, course_id])
+            else:
+                # DuckDB - calculate next ID manually
+                max_id_result = conn.execute('SELECT COALESCE(MAX(id), 0) FROM assigned_courses').fetchone()
+                next_id = (max_id_result[0] if max_id_result else 0) + 1
+                
+                conn.execute('''
+                    INSERT INTO assigned_courses (id, user_id, course_id)
+                    VALUES (?, ?, ?)
+                ''', [next_id, student_id, course_id])
+            
             assigned_count += 1
         except Exception as e:
             logger.debug(f"Skip assignment (may already exist): Student {student_id} to Course {course_id}")
 
     conn.commit()
     conn.close()
+
+    # Backup assignments to JSON after successful database operation
+    try:
+        backup_assignments_to_json()
+        logger.info(f"Assignments synced to JSON backup")
+    except Exception as e:
+        logger.warning(f"JSON backup failed for assignments: {str(e)}")
 
     log_assignment_operation(course_id, student_ids, 'assign')
     logger.info(f"✓ Course assigned successfully | Course ID: {course_id} | Assigned: {assigned_count} students")
@@ -892,10 +1203,24 @@ def upload_file(course_id):
         # Save file info to database
         conn = get_connection()
         log_database_operation('INSERT', 'files', f'File: {file.filename}, Course: {course_id}')
-        conn.execute('''
-            INSERT INTO files (id, course_id, filename, file_path)
-            VALUES (nextval('files_id_seq'), ?, ?, ?)
-        ''', [course_id, file.filename, filepath])
+        
+        # Check if we're using PostgreSQL or DuckDB for proper ID handling
+        from backend.database_unified import use_postgres
+        if use_postgres():
+            conn.execute('''
+                INSERT INTO files (id, course_id, filename, file_path)
+                VALUES (nextval('files_id_seq'), ?, ?, ?)
+            ''', [course_id, file.filename, filepath])
+        else:
+            # DuckDB - calculate next ID manually
+            max_id_result = conn.execute('SELECT COALESCE(MAX(id), 0) FROM files').fetchone()
+            next_id = (max_id_result[0] if max_id_result else 0) + 1
+            
+            conn.execute('''
+                INSERT INTO files (id, course_id, filename, file_path)
+                VALUES (?, ?, ?, ?)
+            ''', [next_id, course_id, file.filename, filepath])
+        
         conn.commit()
 
         file_id = conn.execute('SELECT MAX(id) FROM files').fetchone()[0]
@@ -989,7 +1314,19 @@ def download_file(file_id):
 def index():
     return send_from_directory(app.static_folder, 'index.html')
 
+@app.route('/admin-data')
+def admin_data():
+    return send_from_directory(app.static_folder, 'admin-data.html')
+
 if __name__ == '__main__':
     # Initialize database on startup
     init_database()
+    
+    # Create initial JSON backup
+    try:
+        logger.info("Creating initial JSON backup...")
+        backup_all_to_json()
+    except Exception as e:
+        logger.warning(f"Initial JSON backup failed: {str(e)}")
+    
     app.run(debug=True, port=8000)

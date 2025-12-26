@@ -328,6 +328,21 @@ h1, h2, h3, h4, h5, h6 {
     border-radius: 5px;
 }
 
+/* Lyrics and Audio Editor Containers */
+#lyrics-editor-container,
+#audio-editor-container {
+    height: 250px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    margin-bottom: 15px;
+}
+
+.modal-content.large #lyrics-editor-container,
+.modal-content.large #audio-editor-container {
+    height: 300px;
+}
+
 /* File List */
 .file-list {
     margin-top: 10px;
@@ -485,6 +500,12 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: 0 10px 40px rgba(112, 79, 59, 0.4);
 }
 
+.modal-content.large {
+    max-width: 900px;
+    width: 85%;
+    max-height: 85vh;
+}
+
 .modal-header {
     padding: 20px;
     border-bottom: 1px solid #eee;
@@ -518,6 +539,20 @@ h1, h2, h3, h4, h5, h6 {
 
 .modal-body {
     padding: 20px;
+}
+
+.modal-content.large .modal-body {
+    padding: 30px;
+}
+
+.modal-content.large .form-group {
+    margin-bottom: 25px;
+}
+
+.modal-content.large .form-group label {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 10px;
 }
 
 .modal-body h3 {
@@ -780,5 +815,15 @@ h1, h2, h3, h4, h5, h6 {
     .modal-content {
         width: 95%;
         max-height: 90vh;
+    }
+
+    .modal-content.large {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    #lyrics-editor-container,
+    #audio-editor-container {
+        height: 200px;
     }
 }
