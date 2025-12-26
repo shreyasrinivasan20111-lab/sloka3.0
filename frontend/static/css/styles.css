@@ -168,6 +168,16 @@ h1, h2, h3, h4, h5, h6 {
     background: #7A3A0F;
 }
 
+.btn-warning {
+    background: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background: #e0a800;
+    color: #1e2124;
+}
+
 .btn-block {
     width: 100%;
 }

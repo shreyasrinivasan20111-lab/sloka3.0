@@ -361,3 +361,60 @@ def restore_from_json_backup():
     except Exception as e:
         logger.error(f"Error restoring users from JSON backup: {str(e)}")
         return 0
+
+def restore_from_json_backup():
+    """Restore users from JSON backup to database (for serverless cold starts)"""
+    try:
+        json_path = get_json_file_path(USERS_JSON_FILE)
+        if not os.path.exists(json_path):
+            logger.info("No users JSON backup file found")
+            return 0
+            
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            users = data.get('users', [])
+            
+        if not users:
+            logger.info("Users JSON backup is empty")
+            return 0
+        
+        # Restore users to database
+        conn = get_connection()
+        restored_count = 0
+        
+        for user in users:
+            try:
+                # Check if user already exists
+                existing = conn.execute(
+                    'SELECT id FROM users WHERE email = ?',
+                    [user['email']]
+                ).fetchone()
+                
+                if not existing:
+                    # Insert user into database
+                    conn.execute('''
+                        INSERT INTO users (id, email, hashed_password, role, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', [
+                        user['id'],
+                        user['email'],
+                        user['hashed_password'],
+                        user['role'],
+                        user.get('created_at')
+                    ])
+                    restored_count += 1
+                    logger.info(f"Restored user from backup: {user['email']}")
+                    
+            except Exception as user_error:
+                logger.error(f"Failed to restore user {user.get('email')}: {str(user_error)}")
+                continue
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Successfully restored {restored_count} users from JSON backup")
+        return restored_count
+        
+    except Exception as e:
+        logger.error(f"Failed to restore from JSON backup: {str(e)}")
+        return 0

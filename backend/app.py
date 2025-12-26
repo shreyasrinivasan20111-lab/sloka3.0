@@ -1403,6 +1403,35 @@ def index():
 def admin_data():
     return send_from_directory(app.static_folder, 'admin-data.html')
 
+@app.route('/api/admin/users/credentials', methods=['GET'])
+@admin_required
+def get_user_credentials_admin():
+    """Get all user credentials including hashed passwords (admin only - for debugging)"""
+    try:
+        conn = get_connection()
+        users = conn.execute('''
+            SELECT id, email, hashed_password, role, created_at
+            FROM users
+            ORDER BY id
+        ''').fetchall()
+        
+        result = []
+        for user in users:
+            result.append({
+                'id': user[0],
+                'email': user[1],
+                'hashed_password': user[2],  # Include hashed password for admin view
+                'role': user[3],
+                'created_at': str(user[4]) if user[4] else None
+            })
+        
+        conn.close()
+        return jsonify({'users': result})
+        
+    except Exception as e:
+        logger.error(f"Admin user credentials error: {str(e)}")
+        return jsonify({'error': f'Failed to get user credentials: {str(e)}'}), 500
+
 if __name__ == '__main__':
     # Initialize database on startup
     init_database()
