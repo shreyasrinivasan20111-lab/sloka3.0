@@ -152,7 +152,7 @@ Vercel's serverless functions have limitations:
    - **Solution:** Use cloud storage (see below)
 
 2. **Database Persistence**
-   - DuckDB file-based database won't persist in serverless environment
+   - PostgreSQL DATABASE_URL must be configured for data persistence
    - **Solution:** Use cloud database or keep for demo purposes only
 
 3. **Function Timeout**
@@ -189,14 +189,14 @@ Use services like:
 - [Railway](https://railway.app) (PostgreSQL hosting)
 
 **Migration steps:**
-1. Replace DuckDB with PostgreSQL driver (`psycopg2`)
+1. Configure PostgreSQL with DATABASE_URL environment variable
 2. Update `backend/database.py` with PostgreSQL connection
 3. Adjust SQL syntax for PostgreSQL compatibility
 
 #### Option 2: MongoDB
 Use [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) (Free tier available)
 
-#### Option 3: Keep DuckDB for Demo
+#### PostgreSQL Production Setup
 - Acceptable for demos and testing
 - Database resets on each deployment
 - Add initialization check to populate sample data

@@ -233,10 +233,6 @@ def use_postgres():
     """Always return True since we only use PostgreSQL now"""
     return True
 
-def use_persistent_duckdb():
-    """Always return False since we removed DuckDB support"""
-    return False
-
 if __name__ == '__main__':
     logger.info("🗄️  Database mode: PostgreSQL (Vercel)")
     database_url = os.environ.get('DATABASE_URL', 'Not configured')

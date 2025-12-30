@@ -61,7 +61,7 @@ DATABASE_URL=your-connection-string-here
 Run the setup script to migrate your current courses:
 ```bash
 python setup_database.py
-# Choose option 3: Migrate from DuckDB to PostgreSQL
+# Choose PostgreSQL setup for production deployment
 ```
 
 ### Step 5: Deploy
@@ -83,7 +83,7 @@ git push
 
 The system automatically detects your database configuration:
 
-- **Development**: Uses local DuckDB if no `DATABASE_URL` is set
+- **Production**: Uses PostgreSQL via DATABASE_URL environment variable
 - **Production**: Uses PostgreSQL when `DATABASE_URL` is configured
 - **Migration**: Seamless migration script preserves all your data
 

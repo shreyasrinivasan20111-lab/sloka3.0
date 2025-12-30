@@ -8,7 +8,7 @@ This is a **clean, deployment-ready** version of the Student Course Management S
 
 - **jQuery Frontend** - Clean, concise code (~800 lines)
 - **Flask Backend** - Python with REST API
-- **DuckDB Database** - Embedded SQL database
+- **PostgreSQL Database** - Production-ready SQL database
 - **Quill.js Editor** - Rich text for course content
 - **File Management** - Upload/download course materials
 - **Role-Based Access** - Admin and Student roles
@@ -107,7 +107,7 @@ git push -u origin main
 - ✅ `app.py` - Flask app with all endpoints
 - ✅ `auth.py` - Authentication
 - ✅ `config.py` - Environment configuration
-- ✅ `database.py` - DuckDB schema
+- ✅ `database.py` - PostgreSQL schema
 - ✅ `logger.py` - Logging system
 - ✅ Port 8000 configured
 
@@ -132,7 +132,7 @@ This version includes all the latest fixes:
 
 - **Frontend**: jQuery 3.7.1, HTML5, CSS3
 - **Backend**: Python 3.9+, Flask 3.0+
-- **Database**: DuckDB 0.9.0+ (embedded)
+- **Database**: PostgreSQL (Vercel Postgres)
 - **Rich Text**: Quill.js 1.3.6
 - **Deployment**: Vercel-ready serverless
 
@@ -171,7 +171,7 @@ API: 1 file
 
 ### For Production Deployment
 
-1. **Database Persistence**: DuckDB doesn't persist on Vercel
+1. **Database Configuration**: PostgreSQL required for production
    - Data reinitializes on each cold start
    - For production, migrate to PostgreSQL/MongoDB
 

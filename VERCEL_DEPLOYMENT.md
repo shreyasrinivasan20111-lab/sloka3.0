@@ -13,7 +13,7 @@ slokapp/
 │   ├── app.py                 # Main Flask app (port 8000)
 │   ├── auth.py                # Authentication
 │   ├── config.py              # Environment config
-│   ├── database.py            # DuckDB schema
+│   ├── database.py            # PostgreSQL schema
 │   └── logger.py              # Logging system
 ├── frontend/                   # jQuery frontend
 │   ├── index.html             # Main HTML (jQuery version)
@@ -215,10 +215,10 @@ def handler(request, context):
 
 ### 2. Database Persistence
 
-**Issue**: DuckDB file in `/tmp/` doesn't persist
+**Issue**: PostgreSQL configuration required for data persistence
 
 **Solutions**:
-- **Development**: Local DuckDB file works fine
+- **Production**: PostgreSQL required for data persistence
 - **Production**: Use external database:
   - PostgreSQL (Vercel Postgres, Supabase, Neon)
   - MongoDB (MongoDB Atlas)
@@ -333,7 +333,7 @@ cat vercel.json | python3 -m json.tool
 
 ### Database Errors
 
-**Issue**: DuckDB doesn't persist on Vercel
+**Issue**: PostgreSQL DATABASE_URL required for production
 
 **Temporary Fix** (Development):
 - Database reinitializes on each cold start

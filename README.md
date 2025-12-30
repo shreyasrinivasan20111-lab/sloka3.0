@@ -5,7 +5,7 @@ A beautiful, modern web application for managing student courses with rich text 
 ![Student Course Management System](https://img.shields.io/badge/Version-3.0-brightgreen)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue)
 ![Flask](https://img.shields.io/badge/Flask-3.0+-red)
-![DuckDB](https://img.shields.io/badge/DuckDB-1.1+-yellow)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Latest-blue)
 
 ## ✨ Features
 
@@ -34,14 +34,14 @@ A beautiful, modern web application for managing student courses with rich text 
 - 🔐 Secure session-based authentication
 - 📝 Extensive backend logging
 - 🐛 Comprehensive error handling widget
-- 🗄️ Embedded DuckDB database
+- 🗄️ PostgreSQL database for production reliability
 - ☁️ Production-ready for Vercel deployment
 
 ## Tech Stack
 
 - **Frontend**: Vanilla JavaScript, HTML5, CSS3
 - **Backend**: Python Flask 3.0+
-- **Database**: DuckDB 0.9.0+
+- **Database**: PostgreSQL (Vercel Postgres)
 - **Rich Text**: Quill.js 1.3.6
 - **Authentication**: Session-based with email/password
 
@@ -98,7 +98,7 @@ http://localhost:5000
 spageapp/
 ├── backend/
 │   ├── app.py              # Main Flask application
-│   ├── database.py         # DuckDB schema and initialization
+│   ├── database.py         # PostgreSQL schema and initialization
 │   ├── auth.py             # Authentication decorators
 │   ├── config.py           # Environment-based configuration
 │   └── logger.py           # Logging infrastructure
@@ -316,7 +316,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment guide.
 
 ### Important Production Notes
 
-- **Database**: DuckDB file won't persist on Vercel (ephemeral filesystem). Consider PostgreSQL or MongoDB for production.
+- **Database**: PostgreSQL required for production data persistence.
 - **File Uploads**: Use cloud storage (AWS S3, Cloudinary, etc.) instead of local filesystem.
 - **Logs**: Use external logging service (CloudWatch, Papertrail, etc.) instead of local files.
 
@@ -329,7 +329,7 @@ This project includes comprehensive Copilot instructions in `.github/copilot-ins
 1. Copilot will understand the project architecture
 2. Code suggestions will follow existing patterns
 3. New endpoints will match the logging and error handling patterns
-4. Database operations will use the correct DuckDB syntax
+4. Database operations will use PostgreSQL syntax
 
 ### Adding a New Feature
 
@@ -479,7 +479,7 @@ For issues or questions:
 
 Built with:
 - [Flask](https://flask.palletsprojects.com/)
-- [DuckDB](https://duckdb.org/)
+- [PostgreSQL](https://www.postgresql.org/)
 - [Quill.js](https://quilljs.com/)
 
 ---

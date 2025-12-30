@@ -486,86 +486,37 @@ def get_db_status():
         conn = get_connection()
         
         # Get database type info
-        from backend.database import use_postgres, use_persistent_duckdb
+        from backend.database import use_postgres
         
-        # Get counts from all tables - handle both DuckDB and PostgreSQL
-        if use_postgres():
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM users')
-            user_count = cursor.fetchone()['count']
-            cursor.execute('SELECT COUNT(*) FROM courses')
-            course_count = cursor.fetchone()['count']
-            cursor.execute('SELECT COUNT(*) FROM assigned_courses')
-            assignment_count = cursor.fetchone()['count']
-            cursor.execute('SELECT COUNT(*) FROM files')
-            file_count = cursor.fetchone()['count']
-            cursor.close()
-            
-            db_type = "PostgreSQL (External)"
-            db_path = os.environ.get('DATABASE_URL', 'Environment variable')
-            db_exists = True
-            db_size = "N/A (External Database)"
-            persistent = True
-            storage_info = {
-                'type': 'external_postgres',
-                'persistent': True,
-                'sync_available': False
-            }
-            
-        elif use_persistent_duckdb():
-            user_count = execute_query('SELECT COUNT(*) as count FROM users', fetch_one=True)['count']
-            course_count = execute_query('SELECT COUNT(*) as count FROM courses', fetch_one=True)['count']
-            assignment_count = execute_query('SELECT COUNT(*) as count FROM assigned_courses', fetch_one=True)['count']
-            file_count = execute_query('SELECT COUNT(*) as count FROM files', fetch_one=True)['count']
-            
-            # PostgreSQL database info
-            db_type = "PostgreSQL (Vercel)"
-            db_path = os.environ.get('DATABASE_URL', 'Not configured')[:50] + "..."
-            db_exists = True  # Assume exists if connection works
-            db_size = "Managed by Vercel"
-            persistent = True
-            
-        else:
-            user_count = execute_query('SELECT COUNT(*) as count FROM users', fetch_one=True)['count']
-            course_count = execute_query('SELECT COUNT(*) as count FROM courses', fetch_one=True)['count']
-            assignment_count = execute_query('SELECT COUNT(*) as count FROM assigned_courses', fetch_one=True)['count']
-            file_count = execute_query('SELECT COUNT(*) as count FROM files', fetch_one=True)['count']
-            
-            from backend.config import get_config
-            db_path = get_config().DB_PATH
-            db_type = "DuckDB (Local)"
-            db_exists = os.path.exists(db_path)
-            db_size = f"{round(os.path.getsize(db_path) / 1024 / 1024, 2)} MB" if db_exists else "0 MB"
-            persistent = not os.environ.get('VERCEL') == '1'
-            storage_info = {
-                'type': 'local_file',
-                'persistent': persistent,
-                'sync_available': False
-            }
+        # Get counts from all tables - PostgreSQL only
+        # PostgreSQL database - get counts from all tables
+        user_count = execute_query('SELECT COUNT(*) as count FROM users', fetch_one=True)['count']
+        course_count = execute_query('SELECT COUNT(*) as count FROM courses', fetch_one=True)['count']
+        assignment_count = execute_query('SELECT COUNT(*) as count FROM assigned_courses', fetch_one=True)['count']
+        file_count = execute_query('SELECT COUNT(*) as count FROM files', fetch_one=True)['count']
+        
+        # PostgreSQL database info
+        db_type = "PostgreSQL (Vercel)"
+        db_path = os.environ.get('DATABASE_URL', 'Not configured')[:50] + "..."
+        db_exists = True  # Assume exists if connection works
+        db_size = "Managed by Vercel"
+        persistent = True
+        storage_info = {
+            'type': 'external_postgres',
+            'persistent': True,
+            'sync_available': False
+        }
         
         conn.close()
         
-        is_serverless = os.environ.get('VERCEL') == '1'
-        
-        # Determine status message
-        if persistent:
-            if use_postgres():
-                status_msg = '✅ Data persists in external PostgreSQL database'
-            elif use_persistent_duckdb():
-                status_msg = '✅ Data persists with external DuckDB storage'
-            else:
-                status_msg = '✅ Data persists locally (development mode)'
-        else:
-            status_msg = '⚠️ Data will be lost on deployment restart'
+        # Determine status message - PostgreSQL only
+        status_msg = '✅ Data persists in external PostgreSQL database'
         
         # Generate recommendations
         recommendations = []
-        if not persistent:
-            recommendations.append('Use PostgreSQL or persistent DuckDB for data persistence')
-        if is_serverless and not use_postgres() and not use_persistent_duckdb():
-            recommendations.append('Configure external storage for serverless deployment')
-        if use_persistent_duckdb() and storage_info.get('cloud_sync_enabled'):
-            recommendations.append('Automatic cloud sync is enabled')
+        is_serverless = os.environ.get('VERCEL') == '1'
+        if is_serverless:
+            recommendations.append('PostgreSQL configured for serverless deployment')
         
         return jsonify({
             'database_type': db_type,
@@ -594,20 +545,11 @@ def get_db_status():
 def sync_database():
     """Database sync endpoint - PostgreSQL handles persistence automatically"""
     try:
-        from backend.database import use_persistent_duckdb
-        
-        if not use_persistent_duckdb():
-            return jsonify({
-                'message': 'PostgreSQL database is automatically persistent',
-                'note': 'No manual sync required with Vercel PostgreSQL',
-                'current_storage': 'PostgreSQL (Vercel)'
-            }), 200
-        
-        # This shouldn't happen with PostgreSQL-only, but keeping for safety
         return jsonify({
-            'error': 'Manual sync not supported with PostgreSQL',
+            'message': 'PostgreSQL database is automatically persistent',
+            'note': 'No manual sync required with Vercel PostgreSQL',
             'current_storage': 'PostgreSQL (Vercel)'
-        }), 400
+        }), 200
             
     except Exception as e:
         logger.error(f"Database sync check error: {str(e)}")
@@ -1253,10 +1195,10 @@ def get_environment_variables():
                     'default': None,
                     'category': 'Database'
                 },
-                'DB_PATH': {
-                    'description': 'DuckDB file path',
-                    'required': False,
-                    'default': 'student_courses.db (local) / /tmp/student_courses.db (Vercel)',
+                'DATABASE_URL': {
+                    'description': 'PostgreSQL connection string',
+                    'required': True,
+                    'default': None,
                     'category': 'Database'
                 }
             },
