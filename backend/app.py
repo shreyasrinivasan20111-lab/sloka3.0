@@ -18,13 +18,6 @@ from backend.logger import (
     log_session_activity,
     get_user_info
 )
-from backend.json_storage import (
-    backup_courses_to_json,
-    backup_all_to_json,
-    get_json_backup_status,
-    sync_course_to_json,
-    backup_assignments_to_json
-)
 
 # Get configuration
 config = get_config()
@@ -245,21 +238,6 @@ def signup():
 
         # Get the new user ID
         user_id = conn.execute('SELECT MAX(id) FROM users').fetchone()[0]
-        
-        # SERVERLESS FIX: Force JSON backup immediately after signup with Vercel compatibility
-        try:
-            from backend.json_storage import backup_all_to_json, create_vercel_compatible_backup
-            if os.environ.get('VERCEL') == '1':
-                # Use Vercel-compatible backup with memory fallback
-                create_vercel_compatible_backup()
-                logger.info(f"Vercel-compatible backup completed after signup for {email}")
-            else:
-                # Use regular backup for local development
-                backup_all_to_json()
-                logger.info(f"JSON backup completed after signup for {email}")
-        except Exception as backup_error:
-            logger.warning(f"JSON backup failed after signup: {str(backup_error)}")
-            # Continue anyway - signup should still work even if backup fails
         
         conn.close()
 
@@ -689,78 +667,6 @@ def get_me():
 
 # ============= JSON Backup Endpoints =============
 
-@app.route('/api/backup/json/status', methods=['GET'])
-@admin_required
-def get_json_backup_status_endpoint():
-    """Get status of JSON backup files (admin only)"""
-    try:
-        status = get_json_backup_status()
-        return jsonify(status)
-    except Exception as e:
-        logger.error(f"JSON backup status error: {str(e)}")
-        return jsonify({'error': f'Failed to get JSON backup status: {str(e)}'}), 500
-
-@app.route('/api/backup/json/courses', methods=['POST'])
-@admin_required
-def backup_courses_json_endpoint():
-    """Manually backup courses to JSON (admin only)"""
-    try:
-        success = backup_courses_to_json()
-        if success:
-            return jsonify({
-                'message': 'Courses backed up to JSON successfully',
-                'timestamp': time.time()
-            })
-        else:
-            return jsonify({'error': 'Failed to backup courses to JSON'}), 500
-    except Exception as e:
-        logger.error(f"JSON courses backup error: {str(e)}")
-        return jsonify({'error': f'Failed to backup courses: {str(e)}'}), 500
-
-@app.route('/api/backup/json/all', methods=['POST'])
-@admin_required
-def backup_all_json_endpoint():
-    """Manually backup all data to JSON (admin only)"""
-    try:
-        success = backup_all_to_json()
-        if success:
-            return jsonify({
-                'message': 'All data backed up to JSON successfully',
-                'timestamp': time.time()
-            })
-        else:
-            return jsonify({'error': 'Some JSON backups failed - check logs'}), 500
-    except Exception as e:
-        logger.error(f"JSON full backup error: {str(e)}")
-        return jsonify({'error': f'Failed to backup all data: {str(e)}'}), 500
-
-@app.route('/api/backup/json/download/<filename>', methods=['GET'])
-@admin_required
-def download_json_backup(filename):
-    """Download JSON backup file (admin only)"""
-    try:
-        # Validate filename for security
-        allowed_files = ['courses.json', 'users.json', 'assignments.json', 'files.json']
-        if filename not in allowed_files:
-            return jsonify({'error': 'Invalid backup file requested'}), 400
-        
-        from backend.json_storage import get_json_file_path
-        file_path = get_json_file_path(filename)
-        
-        if not os.path.exists(file_path):
-            return jsonify({'error': 'Backup file not found'}), 404
-        
-        return send_file(
-            file_path, 
-            as_attachment=True, 
-            download_name=f"backup_{filename}",
-            mimetype='application/json'
-        )
-        
-    except Exception as e:
-        logger.error(f"JSON backup download error: {str(e)}")
-        return jsonify({'error': f'Failed to download backup: {str(e)}'}), 500
-
 # ============= Admin Data Viewer Endpoints =============
 
 @app.route('/api/admin/data/users', methods=['GET'])
@@ -857,32 +763,6 @@ def get_all_files_admin():
     except Exception as e:
         logger.error(f"Admin files data error: {str(e)}")
         return jsonify({'error': f'Failed to get files data: {str(e)}'}), 500
-
-@app.route('/api/admin/json/<filename>', methods=['GET'])
-@admin_required
-def get_json_data_admin(filename):
-    """Get JSON backup data for admin viewer (admin only)"""
-    try:
-        # Validate filename
-        allowed_files = ['courses', 'users', 'assignments', 'files']
-        if filename not in allowed_files:
-            return jsonify({'error': 'Invalid JSON file requested'}), 400
-        
-        from backend.json_storage import get_json_file_path
-        json_filename = f"{filename}.json"
-        file_path = get_json_file_path(json_filename)
-        
-        if not os.path.exists(file_path):
-            return jsonify({'error': f'JSON file {json_filename} not found'}), 404
-        
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        return jsonify(data)
-        
-    except Exception as e:
-        logger.error(f"Admin JSON data error: {str(e)}")
-        return jsonify({'error': f'Failed to get JSON data: {str(e)}'}), 500
 
 # ============= Course Endpoints =============
 
@@ -1022,13 +902,6 @@ def create_course():
     conn.commit()
     conn.close()
 
-    # Backup to JSON after successful database operation
-    try:
-        sync_course_to_json(course_id)
-        logger.info(f"Course {course_id} synced to JSON backup")
-    except Exception as e:
-        logger.warning(f"JSON backup failed for course {course_id}: {str(e)}")
-
     log_course_operation('CREATE', course_id, title)
     logger.info(f"✓ Course created successfully | ID: {course_id} | Title: {title}")
 
@@ -1093,15 +966,7 @@ def update_course(course_id):
         conn.close()
         return jsonify({'error': 'Failed to update course'}), 500
 
-    # Backup to JSON after successful database operation
-    try:
-        sync_course_to_json(course_id)
-        logger.info(f"Course {course_id} synced to JSON backup")
-    except Exception as e:
-        logger.warning(f"JSON backup failed for course {course_id}: {str(e)}")
-
     log_course_operation('UPDATE', course_id, title)
-    logger.info(f"✓ Course updated successfully | ID: {course_id} | Title: {title}")
     logger.info(f"✓ Course updated successfully | ID: {course_id} | Title: {title}")
 
     return jsonify({'message': 'Course updated'})
@@ -1150,13 +1015,6 @@ def delete_course(course_id):
         
         conn.commit()
         conn.close()
-
-        # Backup to JSON after successful database operation
-        try:
-            sync_course_to_json(course_id)
-            logger.info(f"Course deletion synced to JSON backup")
-        except Exception as e:
-            logger.warning(f"JSON backup failed after course deletion: {str(e)}")
 
         log_course_operation('DELETE', course_id)
         logger.info(f"✓ Course deleted successfully | ID: {course_id} | Title: {course[0]}")
@@ -1250,13 +1108,6 @@ def assign_course(course_id):
 
     conn.commit()
     conn.close()
-
-    # Backup assignments to JSON after successful database operation
-    try:
-        backup_assignments_to_json()
-        logger.info(f"Assignments synced to JSON backup")
-    except Exception as e:
-        logger.warning(f"JSON backup failed for assignments: {str(e)}")
 
     log_assignment_operation(course_id, student_ids, 'assign')
     logger.info(f"✓ Course assigned successfully | Course ID: {course_id} | Assigned: {assigned_count} students")
@@ -1446,75 +1297,6 @@ def get_user_credentials_admin():
     except Exception as e:
         logger.error(f"Admin user credentials error: {str(e)}")
         return jsonify({'error': f'Failed to get user credentials: {str(e)}'}), 500
-
-@app.route('/api/admin/backup/test', methods=['GET'])
-@admin_required
-def test_backup_system():
-    """Test JSON backup system compatibility (admin only)"""
-    try:
-        results = {
-            'environment': 'vercel' if os.environ.get('VERCEL') == '1' else 'local',
-            'timestamp': time.time(),
-            'filesystem_tests': {},
-            'backup_tests': {},
-            'memory_backup_available': False
-        }
-        
-        # Test filesystem write permissions
-        test_locations = [
-            'json_backup/test.json',
-            '/tmp/test.json',
-            '/tmp/json_backup/test.json'
-        ]
-        
-        for location in test_locations:
-            try:
-                # Ensure directory exists
-                os.makedirs(os.path.dirname(location), exist_ok=True)
-                
-                # Test write
-                with open(location, 'w') as f:
-                    json.dump({'test': True}, f)
-                
-                # Test read
-                with open(location, 'r') as f:
-                    json.load(f)
-                
-                # Clean up
-                os.remove(location)
-                
-                results['filesystem_tests'][location] = {'writable': True, 'error': None}
-                
-            except Exception as e:
-                results['filesystem_tests'][location] = {'writable': False, 'error': str(e)}
-        
-        # Test backup functions
-        from backend.json_storage import (
-            backup_users_to_json, 
-            create_vercel_compatible_backup,
-            has_memory_backup
-        )
-        
-        try:
-            success = backup_users_to_json()
-            results['backup_tests']['users_json'] = {'success': success, 'error': None}
-        except Exception as e:
-            results['backup_tests']['users_json'] = {'success': False, 'error': str(e)}
-        
-        try:
-            success = create_vercel_compatible_backup()
-            results['backup_tests']['vercel_compatible'] = {'success': success, 'error': None}
-        except Exception as e:
-            results['backup_tests']['vercel_compatible'] = {'success': False, 'error': str(e)}
-        
-        # Check memory backup
-        results['memory_backup_available'] = has_memory_backup('users')
-        
-        return jsonify(results)
-        
-    except Exception as e:
-        logger.error(f"Backup system test error: {str(e)}")
-        return jsonify({'error': f'Test failed: {str(e)}'}), 500
 
 @app.route('/api/admin/environment', methods=['GET'])
 @admin_required
@@ -1771,12 +1553,5 @@ def get_environment_variables():
 if __name__ == '__main__':
     # Initialize database on startup
     init_database()
-    
-    # Create initial JSON backup
-    try:
-        logger.info("Creating initial JSON backup...")
-        backup_all_to_json()
-    except Exception as e:
-        logger.warning(f"Initial JSON backup failed: {str(e)}")
     
     app.run(debug=True, port=8000)

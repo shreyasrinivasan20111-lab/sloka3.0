@@ -180,25 +180,6 @@
             background: #f8f9fa;
         }
 
-        .json-viewer {
-            background: #2d2d2d;
-            color: #f8f8f2;
-            padding: 20px;
-            border-radius: 8px;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            overflow-x: auto;
-            margin-bottom: 20px;
-            max-height: 600px;
-            overflow-y: auto;
-        }
-
-        .json-viewer pre {
-            margin: 0;
-            white-space: pre-wrap;
-        }
-
         .loading {
             text-align: center;
             padding: 50px;
@@ -277,13 +258,6 @@
             color: white;
         }
 
-        .backup-actions {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -295,10 +269,6 @@
             }
             
             .tabs {
-                flex-direction: column;
-            }
-            
-            .backup-actions {
                 flex-direction: column;
             }
             
@@ -323,7 +293,6 @@
 
         <div class="tabs">
             <button class="tab-button active" data-tab="database">Database Data</button>
-            <button class="tab-button" data-tab="json">JSON Backups</button>
             <button class="tab-button" data-tab="status">System Status</button>
         </div>
 
@@ -378,57 +347,12 @@
                 </div>
             </div>
 
-            <!-- JSON Backups Tab -->
-            <div id="json-tab" class="tab-pane">
-                <div class="backup-actions">
-                    <button id="backup-all-btn" class="btn btn-success">📁 Backup All Data</button>
-                    <button id="backup-courses-btn" class="btn btn-warning">📚 Backup Courses Only</button>
-                </div>
-
-                <div id="backup-status"></div>
-
-                <div class="data-section">
-                    <h3>Courses JSON Backup</h3>
-                    <div id="courses-json-container">
-                        <div class="loading">Loading courses JSON...</div>
-                    </div>
-                </div>
-
-                <div class="data-section">
-                    <h3>Users JSON Backup</h3>
-                    <div id="users-json-container">
-                        <div class="loading">Loading users JSON...</div>
-                    </div>
-                </div>
-
-                <div class="data-section">
-                    <h3>Assignments JSON Backup</h3>
-                    <div id="assignments-json-container">
-                        <div class="loading">Loading assignments JSON...</div>
-                    </div>
-                </div>
-
-                <div class="data-section">
-                    <h3>Files JSON Backup</h3>
-                    <div id="files-json-container">
-                        <div class="loading">Loading files JSON...</div>
-                    </div>
-                </div>
-            </div>
-
             <!-- System Status Tab -->
             <div id="status-tab" class="tab-pane">
                 <div class="data-section">
                     <h3>Database Status</h3>
                     <div id="db-status-container">
                         <div class="loading">Loading database status...</div>
-                    </div>
-                </div>
-
-                <div class="data-section">
-                    <h3>JSON Backup Status</h3>
-                    <div id="json-status-container">
-                        <div class="loading">Loading JSON backup status...</div>
                     </div>
                 </div>
             </div>
@@ -454,8 +378,6 @@
             // Load data for the selected tab
             if (tabName === 'database') {
                 loadDatabaseData();
-            } else if (tabName === 'json') {
-                loadJsonData();
             } else if (tabName === 'status') {
                 loadSystemStatus();
             }
@@ -466,20 +388,9 @@
             const activeTab = $('.tab-button.active').data('tab');
             if (activeTab === 'database') {
                 loadDatabaseData();
-            } else if (activeTab === 'json') {
-                loadJsonData();
             } else if (activeTab === 'status') {
                 loadSystemStatus();
             }
-        });
-
-        // Backup buttons
-        $('#backup-all-btn').click(function() {
-            backupAllData();
-        });
-
-        $('#backup-courses-btn').click(function() {
-            backupCoursesData();
         });
 
         // Load database data
@@ -517,32 +428,6 @@
             });
         }
 
-        // Load JSON data
-        function loadJsonData() {
-            // Load JSON backup status first
-            $.get('/api/backup/json/status').done(function(data) {
-                displayJsonStatus(data);
-            });
-
-            // Load each JSON file
-            const jsonFiles = ['courses.json', 'users.json', 'assignments.json', 'files.json'];
-            jsonFiles.forEach(filename => {
-                const containerName = filename.replace('.json', '');
-                $(`#${containerName}-json-container`).html('<div class="loading">Loading...</div>');
-                
-                $.get(`/api/admin/json/${containerName}`).done(function(data) {
-                    const jsonViewer = `
-                        <div class="json-viewer">
-                            <pre>${JSON.stringify(data, null, 2)}</pre>
-                        </div>
-                    `;
-                    $(`#${containerName}-json-container`).html(jsonViewer);
-                }).fail(function() {
-                    $(`#${containerName}-json-container`).html('<div class="error">Failed to load JSON data</div>');
-                });
-            });
-        }
-
         // Load system status
         function loadSystemStatus() {
             // Database status
@@ -550,13 +435,6 @@
                 displayDatabaseStatus(data);
             }).fail(function() {
                 $('#db-status-container').html('<div class="error">Failed to load database status</div>');
-            });
-
-            // JSON backup status
-            $.get('/api/backup/json/status').done(function(data) {
-                displayJsonBackupStatus(data);
-            }).fail(function() {
-                $('#json-status-container').html('<div class="error">Failed to load JSON backup status</div>');
             });
         }
 
@@ -715,54 +593,6 @@
                 </div>
             `;
             $('#db-status-container').html(html);
-        }
-
-        function displayJsonBackupStatus(data) {
-            let html = '<div style="background: white; padding: 20px; border-radius: 8px;">';
-            html += `<p><strong>Backup Directory:</strong> ${data.backup_directory}</p>`;
-            html += `<p><strong>Directory Exists:</strong> ${data.backup_directory_exists ? '✅ Yes' : '❌ No'}</p>`;
-            
-            html += '<h4>Backup Files:</h4><table class="data-table" style="margin-top: 10px;"><thead><tr><th>File</th><th>Exists</th><th>Size</th><th>Records</th><th>Last Modified</th></tr></thead><tbody>';
-            
-            Object.keys(data.files).forEach(filename => {
-                const file = data.files[filename];
-                html += `
-                    <tr>
-                        <td>${filename}</td>
-                        <td>${file.exists ? '✅' : '❌'}</td>
-                        <td>${file.size_bytes ? (file.size_bytes / 1024).toFixed(1) + ' KB' : 'N/A'}</td>
-                        <td>${file.record_count}</td>
-                        <td>${file.last_modified ? new Date(file.last_modified).toLocaleString() : 'N/A'}</td>
-                    </tr>
-                `;
-            });
-            
-            html += '</tbody></table></div>';
-            $('#json-status-container').html(html);
-        }
-
-        function backupAllData() {
-            $('#backup-status').html('<div class="loading">Backing up all data...</div>');
-            $.post('/api/backup/json/all').done(function(data) {
-                $('#backup-status').html('<div class="success">' + data.message + '</div>');
-                setTimeout(() => $('#backup-status').html(''), 5000);
-                loadJsonData(); // Reload JSON data
-            }).fail(function(xhr) {
-                const error = xhr.responseJSON ? xhr.responseJSON.error : 'Backup failed';
-                $('#backup-status').html('<div class="error">' + error + '</div>');
-            });
-        }
-
-        function backupCoursesData() {
-            $('#backup-status').html('<div class="loading">Backing up courses...</div>');
-            $.post('/api/backup/json/courses').done(function(data) {
-                $('#backup-status').html('<div class="success">' + data.message + '</div>');
-                setTimeout(() => $('#backup-status').html(''), 5000);
-                loadJsonData(); // Reload JSON data
-            }).fail(function(xhr) {
-                const error = xhr.responseJSON ? xhr.responseJSON.error : 'Backup failed';
-                $('#backup-status').html('<div class="error">' + error + '</div>');
-            });
         }
 
         // Initialize page
