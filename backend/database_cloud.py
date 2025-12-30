@@ -10,6 +10,22 @@ import shutil
 from pathlib import Path
 from backend.logger import logger
 
+# Optional cloud storage imports
+try:
+    import boto3  # type: ignore
+except ImportError:
+    boto3 = None
+
+try:
+    from google.cloud import storage  # type: ignore
+except ImportError:
+    storage = None
+
+try:
+    import requests  # type: ignore
+except ImportError:
+    requests = None
+
 class CloudDuckDBManager:
     """Manages DuckDB file storage in cloud services"""
     
@@ -86,9 +102,11 @@ class CloudDuckDBManager:
     
     def _download_from_s3(self, local_path):
         """Download from AWS S3"""
-        try:
-            import boto3
+        if boto3 is None:
+            logger.warning("boto3 not installed for S3 support")
+            return False
             
+        try:
             s3 = boto3.client('s3')
             bucket = os.environ.get('S3_BUCKET', 'student-course-db')
             key = os.environ.get('S3_KEY', 'student_courses.db')
@@ -96,18 +114,17 @@ class CloudDuckDBManager:
             s3.download_file(bucket, key, local_path)
             return True
             
-        except ImportError:
-            logger.warning("boto3 not installed for S3 support")
-            return False
         except Exception as e:
             logger.debug(f"S3 download failed (expected for new databases): {e}")
             return False
     
     def _download_from_gcs(self, local_path):
         """Download from Google Cloud Storage"""
-        try:
-            from google.cloud import storage
+        if storage is None:
+            logger.warning("google-cloud-storage not installed for GCS support")
+            return False
             
+        try:
             client = storage.Client()
             bucket_name = os.environ.get('GCS_BUCKET', 'student-course-db')
             blob_name = os.environ.get('GCS_BLOB', 'student_courses.db')
@@ -118,18 +135,17 @@ class CloudDuckDBManager:
             blob.download_to_filename(local_path)
             return True
             
-        except ImportError:
-            logger.warning("google-cloud-storage not installed for GCS support")
-            return False
         except Exception as e:
             logger.debug(f"GCS download failed (expected for new databases): {e}")
             return False
     
     def _download_from_vercel_blob(self, local_path):
         """Download from Vercel Blob Storage"""
-        try:
-            import requests
+        if requests is None:
+            logger.warning("requests not installed for Vercel Blob support")
+            return False
             
+        try:
             blob_url = os.environ.get('BLOB_URL')
             if not blob_url:
                 # Construct URL if not provided
@@ -175,9 +191,11 @@ class CloudDuckDBManager:
     
     def _upload_to_s3(self):
         """Upload to AWS S3"""
-        try:
-            import boto3
+        if boto3 is None:
+            logger.warning("boto3 not installed for S3 support")
+            return False
             
+        try:
             s3 = boto3.client('s3')
             bucket = os.environ.get('S3_BUCKET', 'student-course-db')
             key = os.environ.get('S3_KEY', 'student_courses.db')
@@ -192,9 +210,11 @@ class CloudDuckDBManager:
     
     def _upload_to_gcs(self):
         """Upload to Google Cloud Storage"""
-        try:
-            from google.cloud import storage
+        if storage is None:
+            logger.warning("google-cloud-storage not installed for GCS support")
+            return False
             
+        try:
             client = storage.Client()
             bucket_name = os.environ.get('GCS_BUCKET', 'student-course-db')
             blob_name = os.environ.get('GCS_BLOB', 'student_courses.db')
@@ -212,9 +232,11 @@ class CloudDuckDBManager:
     
     def _upload_to_vercel_blob(self):
         """Upload to Vercel Blob Storage"""
-        try:
-            import requests
+        if requests is None:
+            logger.warning("requests not installed for Vercel Blob support")
+            return False
             
+        try:
             with open(self.local_db_path, 'rb') as f:
                 file_data = f.read()
             

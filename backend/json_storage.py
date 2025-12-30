@@ -29,6 +29,7 @@ FILES_JSON_FILE = "files.json"
 
 def ensure_json_directory():
     """Ensure the JSON storage directory exists - Vercel-compatible"""
+    global JSON_STORAGE_DIR
     try:
         storage_dir = get_storage_directory()
         Path(storage_dir).mkdir(parents=True, exist_ok=True)
@@ -44,14 +45,12 @@ def ensure_json_directory():
             logger.error(f"No write permissions for {storage_dir}: {str(perm_error)}")
             if os.environ.get('VERCEL') == '1':
                 logger.warning("Using /tmp directory fallback for Vercel")
-                global JSON_STORAGE_DIR
                 JSON_STORAGE_DIR = "/tmp"
             
     except Exception as e:
         logger.error(f"Failed to create JSON storage directory: {str(e)}")
         if os.environ.get('VERCEL') == '1':
             # Last resort: use /tmp directly
-            global JSON_STORAGE_DIR
             JSON_STORAGE_DIR = "/tmp"
             logger.warning("Falling back to /tmp directory for JSON storage")
 

@@ -1414,6 +1414,10 @@ def admin_data():
 def admin_users():
     return send_from_directory(app.static_folder, 'admin-users.html')
 
+@app.route('/admin-environment')
+def admin_environment():
+    return send_from_directory(app.static_folder, 'admin-environment.html')
+
 @app.route('/api/admin/users/credentials', methods=['GET'])
 @admin_required
 def get_user_credentials_admin():
@@ -1511,6 +1515,258 @@ def test_backup_system():
     except Exception as e:
         logger.error(f"Backup system test error: {str(e)}")
         return jsonify({'error': f'Test failed: {str(e)}'}), 500
+
+@app.route('/api/admin/environment', methods=['GET'])
+@admin_required
+def get_environment_variables():
+    """Get all required environment variables and their status (admin only)"""
+    try:
+        # Define all environment variables used by the application
+        env_vars = {
+            'core': {
+                'SECRET_KEY': {
+                    'description': 'Flask secret key for session encryption',
+                    'required': True,
+                    'default': 'dev-secret-key-change-in-production',
+                    'category': 'Security'
+                },
+                'FLASK_ENV': {
+                    'description': 'Flask environment (development/production)',
+                    'required': False,
+                    'default': 'development',
+                    'category': 'Application'
+                },
+                'VERCEL': {
+                    'description': 'Vercel deployment flag (automatically set)',
+                    'required': False,
+                    'default': None,
+                    'category': 'Deployment'
+                }
+            },
+            'database': {
+                'DATABASE_URL': {
+                    'description': 'PostgreSQL connection string',
+                    'required': False,
+                    'default': None,
+                    'category': 'Database'
+                },
+                'DB_HOST': {
+                    'description': 'PostgreSQL host address',
+                    'required': False,
+                    'default': None,
+                    'category': 'Database'
+                },
+                'DB_PORT': {
+                    'description': 'PostgreSQL port',
+                    'required': False,
+                    'default': '5432',
+                    'category': 'Database'
+                },
+                'DB_NAME': {
+                    'description': 'PostgreSQL database name',
+                    'required': False,
+                    'default': None,
+                    'category': 'Database'
+                },
+                'DB_USER': {
+                    'description': 'PostgreSQL username',
+                    'required': False,
+                    'default': None,
+                    'category': 'Database'
+                },
+                'DB_PASSWORD': {
+                    'description': 'PostgreSQL password',
+                    'required': False,
+                    'default': None,
+                    'category': 'Database'
+                },
+                'DB_PATH': {
+                    'description': 'DuckDB file path',
+                    'required': False,
+                    'default': 'student_courses.db (local) / /tmp/student_courses.db (Vercel)',
+                    'category': 'Database'
+                }
+            },
+            'storage': {
+                'UPLOAD_FOLDER': {
+                    'description': 'File upload directory',
+                    'required': False,
+                    'default': 'uploads (local) / /tmp/uploads (Vercel)',
+                    'category': 'Storage'
+                },
+                'MAX_CONTENT_LENGTH': {
+                    'description': 'Maximum upload file size in bytes',
+                    'required': False,
+                    'default': '16777216 (16MB)',
+                    'category': 'Storage'
+                },
+                'NETWORK_DB_PATH': {
+                    'description': 'Network-mounted database path',
+                    'required': False,
+                    'default': None,
+                    'category': 'Storage'
+                },
+                'VERCEL_VOLUME_PATH': {
+                    'description': 'Vercel volume mount path',
+                    'required': False,
+                    'default': None,
+                    'category': 'Storage'
+                }
+            },
+            'cloud_storage': {
+                'AWS_ACCESS_KEY_ID': {
+                    'description': 'AWS access key for S3 storage',
+                    'required': False,
+                    'default': None,
+                    'category': 'Cloud Storage'
+                },
+                'AWS_SECRET_ACCESS_KEY': {
+                    'description': 'AWS secret key for S3 storage',
+                    'required': False,
+                    'default': None,
+                    'category': 'Cloud Storage'
+                },
+                'S3_BUCKET': {
+                    'description': 'S3 bucket name',
+                    'required': False,
+                    'default': 'student-course-db',
+                    'category': 'Cloud Storage'
+                },
+                'S3_KEY': {
+                    'description': 'S3 object key for database file',
+                    'required': False,
+                    'default': 'student_courses.db',
+                    'category': 'Cloud Storage'
+                },
+                'GOOGLE_APPLICATION_CREDENTIALS': {
+                    'description': 'Path to Google Cloud service account JSON',
+                    'required': False,
+                    'default': None,
+                    'category': 'Cloud Storage'
+                },
+                'GCS_BUCKET': {
+                    'description': 'Google Cloud Storage bucket name',
+                    'required': False,
+                    'default': 'student-course-db',
+                    'category': 'Cloud Storage'
+                },
+                'GCS_BLOB': {
+                    'description': 'Google Cloud Storage blob name',
+                    'required': False,
+                    'default': 'student_courses.db',
+                    'category': 'Cloud Storage'
+                },
+                'BLOB_READ_WRITE_TOKEN': {
+                    'description': 'Vercel Blob storage access token',
+                    'required': False,
+                    'default': None,
+                    'category': 'Cloud Storage'
+                },
+                'BLOB_URL': {
+                    'description': 'Vercel Blob storage URL',
+                    'required': False,
+                    'default': None,
+                    'category': 'Cloud Storage'
+                },
+                'BLOB_NAME': {
+                    'description': 'Vercel Blob storage file name',
+                    'required': False,
+                    'default': 'student_courses.db',
+                    'category': 'Cloud Storage'
+                }
+            },
+            'server': {
+                'CORS_ORIGINS': {
+                    'description': 'Comma-separated list of allowed CORS origins',
+                    'required': False,
+                    'default': '*',
+                    'category': 'Server'
+                },
+                'AWS_LAMBDA_FUNCTION_NAME': {
+                    'description': 'AWS Lambda function name (auto-detected)',
+                    'required': False,
+                    'default': None,
+                    'category': 'Server'
+                },
+                'LAMBDA_RUNTIME_DIR': {
+                    'description': 'AWS Lambda runtime directory (auto-detected)',
+                    'required': False,
+                    'default': None,
+                    'category': 'Server'
+                },
+                'SERVERLESS': {
+                    'description': 'Generic serverless environment flag',
+                    'required': False,
+                    'default': None,
+                    'category': 'Server'
+                }
+            }
+        }
+        
+        # Check current values and status
+        result = {
+            'environment_type': 'vercel' if os.environ.get('VERCEL') == '1' else 'local',
+            'timestamp': time.time(),
+            'categories': {}
+        }
+        
+        for category, variables in env_vars.items():
+            result['categories'][category] = {
+                'variables': {},
+                'configured_count': 0,
+                'total_count': len(variables)
+            }
+            
+            for var_name, var_info in variables.items():
+                current_value = os.environ.get(var_name)
+                is_set = current_value is not None
+                is_using_default = not is_set and var_info.get('default') is not None
+                
+                # For sensitive variables, don't show actual values
+                display_value = current_value
+                if var_name in ['SECRET_KEY', 'DB_PASSWORD', 'AWS_SECRET_ACCESS_KEY', 'BLOB_READ_WRITE_TOKEN'] and current_value:
+                    display_value = f"***{current_value[-4:]}" if len(current_value) > 4 else "***"
+                
+                result['categories'][category]['variables'][var_name] = {
+                    'description': var_info['description'],
+                    'required': var_info['required'],
+                    'is_set': is_set,
+                    'value': display_value,
+                    'using_default': is_using_default,
+                    'default_value': var_info['default'],
+                    'category_name': var_info['category']
+                }
+                
+                if is_set:
+                    result['categories'][category]['configured_count'] += 1
+        
+        # Add deployment recommendations
+        result['recommendations'] = []
+        
+        if result['environment_type'] == 'local':
+            if not os.environ.get('SECRET_KEY'):
+                result['recommendations'].append('Set SECRET_KEY for production security')
+        else:  # Vercel
+            if not os.environ.get('SECRET_KEY'):
+                result['recommendations'].append('CRITICAL: Set SECRET_KEY in Vercel environment variables')
+            if not os.environ.get('BLOB_READ_WRITE_TOKEN'):
+                result['recommendations'].append('Consider setting BLOB_READ_WRITE_TOKEN for persistent storage')
+        
+        # Add summary statistics
+        total_vars = sum(len(variables) for variables in env_vars.values())
+        set_vars = sum(1 for category in result['categories'].values() for var in category['variables'].values() if var['is_set'])
+        
+        result['summary'] = {
+            'total_variables': total_vars,
+            'configured_variables': set_vars,
+            'configuration_percentage': round((set_vars / total_vars) * 100, 1) if total_vars > 0 else 0
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Environment variables error: {str(e)}")
+        return jsonify({'error': f'Failed to get environment variables: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # Initialize database on startup

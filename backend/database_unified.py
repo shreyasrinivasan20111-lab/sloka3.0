@@ -78,6 +78,12 @@ def init_database():
     
     return result
 
+def ensure_tables_exist():
+    """Ensure all required database tables exist"""
+    # This function ensures database tables are properly initialized
+    # It's essentially an alias for init_database() to maintain compatibility
+    return init_database()
+
 class DatabaseConnection:
     """Database connection wrapper that handles SQL differences between DuckDB and PostgreSQL"""
     

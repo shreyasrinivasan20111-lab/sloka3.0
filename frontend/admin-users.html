@@ -6,7 +6,18 @@
     <title>Admin User Management - Sloka Course Management</title>
     
     <!-- Import Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Nova+Round:wght@400&family=Limelight:wght@400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family                <a href="/admin-data" class="btn btn-warning">
+                    <i class="fas fa-database"></i> Data Viewer
+                </a>
+                <a href="/admin-environment" class="btn btn-success">
+                    <i class="fas fa-cog"></i> Environment
+                </a>
+                <a href="/" class="btn btn-primary">
+                    <i class="fas fa-home"></i> Dashboard
+                </a>
+                <button class="btn btn-danger" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>nd:wght@400&family=Limelight:wght@400&display=swap" rel="stylesheet">
     
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -385,11 +396,11 @@
             $.get('/api/check-auth').done(function(data) {
                 if (!data.authenticated || data.user.role !== 'admin') {
                     alert('Admin access required');
-                    window.location.href = '/frontend/index.html';
+                    window.location.href = '/';
                 }
             }).fail(function() {
                 alert('Authentication failed');
-                window.location.href = '/frontend/index.html';
+                window.location.href = '/';
             });
         }
 
@@ -549,7 +560,7 @@ Password Hash: ${user.hashed_password}
         function logout() {
             if (confirm('Are you sure you want to logout?')) {
                 $.post('/api/logout').always(function() {
-                    window.location.href = '/frontend/index.html';
+                    window.location.href = '/';
                 });
             }
         }
