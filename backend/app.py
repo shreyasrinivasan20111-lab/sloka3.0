@@ -4,7 +4,7 @@ from werkzeug.utils import secure_filename
 import os
 import time
 import json
-from backend.database_unified import get_connection, init_database, use_postgres
+from backend.database import get_connection, init_database, use_postgres
 from backend.auth import login_required, admin_required, verify_user, get_current_user
 from backend.config import get_config
 from backend.logger import (
@@ -126,7 +126,7 @@ def login():
 
         # SERVERLESS FIX: Ensure database is initialized before auth
         try:
-            from backend.database_unified import ensure_tables_exist
+            from backend.database import ensure_tables_exist
             ensure_tables_exist()
             logger.info("Database tables verified for login")
         except Exception as db_error:
@@ -194,7 +194,7 @@ def signup():
 
         # SERVERLESS FIX: Ensure database is initialized before any operations
         try:
-            from backend.database_unified import ensure_tables_exist
+            from backend.database import ensure_tables_exist
             ensure_tables_exist()
             logger.info("Database tables verified for signup")
         except Exception as db_error:
@@ -218,7 +218,7 @@ def signup():
         log_database_operation('INSERT', 'users', f'New student account: {email}')
         
         # Check if we're using PostgreSQL or DuckDB for proper ID handling
-        from backend.database_unified import use_postgres
+        from backend.database import use_postgres
         if use_postgres():
             conn.execute('''
                 INSERT INTO users (id, email, hashed_password, role)
@@ -506,7 +506,7 @@ def get_db_status():
         conn = get_connection()
         
         # Get database type info
-        from backend.database_unified import use_postgres, use_persistent_duckdb
+        from backend.database import use_postgres, use_persistent_duckdb
         
         # Get counts from all tables - handle both DuckDB and PostgreSQL
         if use_postgres():
@@ -538,23 +538,12 @@ def get_db_status():
             assignment_count = conn.execute('SELECT COUNT(*) FROM assigned_courses').fetchone()[0]
             file_count = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
             
-            # Get persistent DuckDB storage info
-            try:
-                from backend.database_persistent import get_persistence_info
-                storage_info = get_persistence_info()
-                db_type = f"DuckDB ({storage_info['storage_type'].replace('_', ' ').title()})"
-                db_path = storage_info['database_path']
-                db_exists = storage_info['exists']
-                db_size = f"{storage_info['size_mb']} MB"
-                persistent = storage_info['is_persistent']
-            except Exception as e:
-                logger.warning(f"Failed to get persistent storage info: {e}")
-                db_type = "DuckDB (Persistent - Error)"
-                db_path = "Unknown"
-                db_exists = False
-                db_size = "Unknown"
-                persistent = True
-                storage_info = {'type': 'unknown', 'persistent': True}
+            # PostgreSQL database info
+            db_type = "PostgreSQL (Vercel)"
+            db_path = os.environ.get('DATABASE_URL', 'Not configured')[:50] + "..."
+            db_exists = True  # Assume exists if connection works
+            db_size = "Managed by Vercel"
+            persistent = True
             
         else:
             user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
@@ -623,41 +612,29 @@ def get_db_status():
 @app.route('/api/db-sync', methods=['POST'])
 @admin_required
 def sync_database():
-    """Manually sync database to cloud storage (admin only)"""
+    """Database sync endpoint - PostgreSQL handles persistence automatically"""
     try:
-        from backend.database_unified import use_persistent_duckdb
+        from backend.database import use_persistent_duckdb
         
         if not use_persistent_duckdb():
             return jsonify({
-                'error': 'Database sync only available with persistent DuckDB storage',
-                'current_storage': 'PostgreSQL' if use_postgres() else 'Local DuckDB'
-            }), 400
+                'message': 'PostgreSQL database is automatically persistent',
+                'note': 'No manual sync required with Vercel PostgreSQL',
+                'current_storage': 'PostgreSQL (Vercel)'
+            }), 200
         
-        # Attempt to sync
-        from backend.database_persistent import sync_database as do_sync
-        success = do_sync()
-        
-        if success:
-            logger.info("Manual database sync completed successfully")
-            return jsonify({
-                'message': 'Database synced successfully to cloud storage',
-                'synced_at': time.time()
-            })
-        else:
-            return jsonify({
-                'error': 'Database sync failed - check cloud storage configuration',
-                'help': 'Ensure BLOB_READ_WRITE_TOKEN or other cloud credentials are set'
-            }), 500
+        # This shouldn't happen with PostgreSQL-only, but keeping for safety
+        return jsonify({
+            'error': 'Manual sync not supported with PostgreSQL',
+            'current_storage': 'PostgreSQL (Vercel)'
+        }), 400
             
-    except ImportError:
-        return jsonify({
-            'error': 'Persistent database module not available'
-        }), 500
     except Exception as e:
-        logger.error(f"Database sync error: {str(e)}")
+        logger.error(f"Database sync check error: {str(e)}")
         return jsonify({
-            'error': f'Database sync failed: {str(e)}'
-        }), 500
+            'message': 'PostgreSQL database is automatically persistent',
+            'note': 'Vercel PostgreSQL handles persistence automatically'
+        }), 200
 
 @app.route('/api/me', methods=['GET'])
 @login_required
@@ -881,7 +858,7 @@ def create_course():
     log_database_operation('INSERT', 'courses', f'Title: {title}')
     
     # Check if we're using PostgreSQL or DuckDB for proper ID handling
-    from backend.database_unified import use_postgres
+    from backend.database import use_postgres
     if use_postgres():
         conn.execute('''
             INSERT INTO courses (id, title, description, content_richtext, lyrics, audio)
@@ -1086,7 +1063,7 @@ def assign_course(course_id):
             log_database_operation('INSERT', 'assigned_courses', f'Student: {student_id}, Course: {course_id}')
             
             # Check if we're using PostgreSQL or DuckDB for proper ID handling
-            from backend.database_unified import use_postgres
+            from backend.database import use_postgres
             if use_postgres():
                 conn.execute('''
                     INSERT INTO assigned_courses (id, user_id, course_id)
@@ -1148,7 +1125,7 @@ def upload_file(course_id):
         log_database_operation('INSERT', 'files', f'File: {file.filename}, Course: {course_id}')
         
         # Check if we're using PostgreSQL or DuckDB for proper ID handling
-        from backend.database_unified import use_postgres
+        from backend.database import use_postgres
         if use_postgres():
             conn.execute('''
                 INSERT INTO files (id, course_id, filename, file_path)

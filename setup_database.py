@@ -10,7 +10,7 @@ import sys
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.database_unified import use_postgres, init_database
+from backend.database import use_postgres, init_database
 from backend.logger import logger
 
 def check_environment():
@@ -74,29 +74,26 @@ def migrate_to_postgres():
         return
     
     try:
-        # Import migration function
-        from backend.database_postgres import migrate_duckdb_to_postgres
+        print("🔄 Initializing PostgreSQL database...")
+        init_database()
         
-        print("🔄 Starting migration...")
-        success = migrate_duckdb_to_postgres()
-        
-        if success:
-            print()
-            print("✅ Migration completed successfully!")
-            print("Your data is now stored in PostgreSQL and will persist across deployments.")
-            print()
-            print("Next steps:")
-            print("1. Add DATABASE_URL to your Vercel environment variables")
-            print("2. Redeploy your application")  
-            print("3. Your courses will now persist forever! 🎉")
-        else:
-            print("❌ Migration failed - check the error messages above")
+        print()
+        print("✅ Database initialization completed successfully!")
+        print("Your database is now set up with PostgreSQL and will persist across deployments.")
+        print()
+        print("Sample accounts created:")
+        print("👨‍💼 Admin: admin@example.com / admin123")
+        print("👨‍🎓 Student1: student1@example.com / student123") 
+        print("👨‍🎓 Student2: student2@example.com / student123")
+        print()
+        print("Next steps:")
+        print("1. Add DATABASE_URL to your Vercel environment variables")
+        print("2. Deploy your application")  
+        print("3. Your courses will now persist forever! 🎉")
             
-    except ImportError:
-        print("❌ PostgreSQL dependencies not installed")
-        print("Run: pip install psycopg2-binary")
     except Exception as e:
-        print(f"❌ Migration error: {e}")
+        print(f"❌ Database initialization error: {e}")
+        print("Make sure your PostgreSQL connection is working and try again.")
 
 def setup_database():
     """Initialize database (PostgreSQL or DuckDB)"""

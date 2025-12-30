@@ -1,7 +1,7 @@
 from functools import wraps
 from flask import session, jsonify
 from werkzeug.security import check_password_hash
-from backend.database_unified import get_connection
+from backend.database import get_connection
 from backend.logger import logger
 import os
 
