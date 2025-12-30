@@ -374,12 +374,11 @@ def check_auth():
         # SERVERLESS FIX: Verify user still exists in database
         # This is critical for serverless environments where DB might be recreated
         try:
-            conn = get_connection()
-            db_user = conn.execute(
-                'SELECT id, email, role FROM users WHERE id = ? AND email = ?',
-                [user_id, email]
-            ).fetchone()
-            conn.close()
+            db_user = execute_query(
+                'SELECT id, email, role FROM users WHERE id = %s AND email = %s',
+                [user_id, email],
+                fetch_one=True
+            )
             
             if not db_user:
                 logger.warning(f"Session user not found in database (serverless restart?): {email} (ID: {user_id})")
@@ -394,8 +393,8 @@ def check_auth():
                 }), 200
                 
             # Verify role matches
-            if db_user[2].lower() != role:
-                logger.warning(f"Role mismatch for user {email}: session={role}, db={db_user[2]}")
+            if db_user['role'].lower() != role:
+                logger.warning(f"Role mismatch for user {email}: session={role}, db={db_user['role']}")
                 try:
                     session.clear()
                 except:
@@ -466,13 +465,10 @@ def check_auth_simple():
 def debug_db():
     """Debug database connectivity"""
     try:
-        from backend.database import get_connection
-        conn = get_connection()
-        result = conn.execute('SELECT COUNT(*) FROM users').fetchone()
-        conn.close()
+        result = execute_query('SELECT COUNT(*) FROM users', fetch_one=True)
         return jsonify({
             'db_working': True,
-            'user_count': result[0] if result else 0,
+            'user_count': result['count'] if result else 0,
             'debug': 'db-connection-ok'
         }), 200
     except Exception as e:
@@ -517,10 +513,10 @@ def get_db_status():
             }
             
         elif use_persistent_duckdb():
-            user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
-            course_count = conn.execute('SELECT COUNT(*) FROM courses').fetchone()[0]
-            assignment_count = conn.execute('SELECT COUNT(*) FROM assigned_courses').fetchone()[0]
-            file_count = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
+            user_count = execute_query('SELECT COUNT(*) as count FROM users', fetch_one=True)['count']
+            course_count = execute_query('SELECT COUNT(*) as count FROM courses', fetch_one=True)['count']
+            assignment_count = execute_query('SELECT COUNT(*) as count FROM assigned_courses', fetch_one=True)['count']
+            file_count = execute_query('SELECT COUNT(*) as count FROM files', fetch_one=True)['count']
             
             # PostgreSQL database info
             db_type = "PostgreSQL (Vercel)"
@@ -530,10 +526,10 @@ def get_db_status():
             persistent = True
             
         else:
-            user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
-            course_count = conn.execute('SELECT COUNT(*) FROM courses').fetchone()[0]
-            assignment_count = conn.execute('SELECT COUNT(*) FROM assigned_courses').fetchone()[0]
-            file_count = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
+            user_count = execute_query('SELECT COUNT(*) as count FROM users', fetch_one=True)['count']
+            course_count = execute_query('SELECT COUNT(*) as count FROM courses', fetch_one=True)['count']
+            assignment_count = execute_query('SELECT COUNT(*) as count FROM assigned_courses', fetch_one=True)['count']
+            file_count = execute_query('SELECT COUNT(*) as count FROM files', fetch_one=True)['count']
             
             from backend.config import get_config
             db_path = get_config().DB_PATH
@@ -635,23 +631,21 @@ def get_me():
 def get_all_users_admin():
     """Get all users for admin data viewer (admin only)"""
     try:
-        conn = get_connection()
-        users = conn.execute('''
+        users = execute_query('''
             SELECT id, email, role, created_at
             FROM users
             ORDER BY id
-        ''').fetchall()
+        ''')
         
         result = []
         for user in users:
             result.append({
-                'id': user[0],
-                'email': user[1],
-                'role': user[2],
-                'created_at': str(user[3]) if user[3] else None
+                'id': user['id'],
+                'email': user['email'],
+                'role': user['role'],
+                'created_at': str(user['created_at']) if user['created_at'] else None
             })
         
-        conn.close()
         return jsonify({'users': result})
         
     except Exception as e:
@@ -663,26 +657,24 @@ def get_all_users_admin():
 def get_all_assignments_admin():
     """Get all assignments for admin data viewer (admin only)"""
     try:
-        conn = get_connection()
-        assignments = conn.execute('''
+        assignments = execute_query('''
             SELECT ac.id, ac.user_id, ac.course_id, u.email, c.title
             FROM assigned_courses ac
             JOIN users u ON ac.user_id = u.id
             JOIN courses c ON ac.course_id = c.id
             ORDER BY ac.id
-        ''').fetchall()
+        ''')
         
         result = []
         for assignment in assignments:
             result.append({
-                'id': assignment[0],
-                'user_id': assignment[1],
-                'course_id': assignment[2],
-                'user_email': assignment[3],
-                'course_title': assignment[4]
+                'id': assignment['id'],
+                'user_id': assignment['user_id'],
+                'course_id': assignment['course_id'],
+                'user_email': assignment['email'],
+                'course_title': assignment['title']
             })
         
-        conn.close()
         return jsonify({'assignments': result})
         
     except Exception as e:
@@ -694,31 +686,29 @@ def get_all_assignments_admin():
 def get_all_files_admin():
     """Get all files for admin data viewer (admin only)"""
     try:
-        conn = get_connection()
-        files = conn.execute('''
+        files = execute_query('''
             SELECT f.id, f.course_id, f.filename, f.file_path, c.title
             FROM files f
             JOIN courses c ON f.course_id = c.id
             ORDER BY f.id
-        ''').fetchall()
+        ''')
         
         result = []
         for file in files:
             # Check if file exists and get size
-            file_exists = os.path.exists(file[3]) if file[3] else False
-            file_size = os.path.getsize(file[3]) if file_exists else 0
+            file_exists = os.path.exists(file['file_path']) if file['file_path'] else False
+            file_size = os.path.getsize(file['file_path']) if file_exists else 0
             
             result.append({
-                'id': file[0],
-                'course_id': file[1],
-                'filename': file[2],
-                'file_path': file[3],
-                'course_title': file[4],
+                'id': file['id'],
+                'course_id': file['course_id'],
+                'filename': file['filename'],
+                'file_path': file['file_path'],
+                'course_title': file['title'],
                 'file_exists': file_exists,
                 'file_size_bytes': file_size
             })
         
-        conn.close()
         return jsonify({'files': result})
         
     except Exception as e:
@@ -773,47 +763,43 @@ def get_courses():
 @login_required
 def get_course(course_id):
     """Get a single course with files"""
-    conn = get_connection()
-
+    
     # Check if student has access to this course
     if session.get('role') == 'student':
-        access = conn.execute('''
-            SELECT COUNT(*) FROM assigned_courses
-            WHERE user_id = ? AND course_id = ?
-        ''', [session['user_id'], course_id]).fetchone()
+        access = execute_query('''
+            SELECT COUNT(*) as count FROM assigned_courses
+            WHERE user_id = %s AND course_id = %s
+        ''', [session['user_id'], course_id], fetch_one=True)
 
-        if access[0] == 0:
-            conn.close()
+        if access['count'] == 0:
             return jsonify({'error': 'Access denied'}), 403
 
-    course = conn.execute('''
+    course = execute_query('''
         SELECT id, title, description, content_richtext, lyrics, audio, created_at
         FROM courses
-        WHERE id = ?
-    ''', [course_id]).fetchone()
+        WHERE id = %s
+    ''', [course_id], fetch_one=True)
 
     if not course:
-        conn.close()
         return jsonify({'error': 'Course not found'}), 404
 
-    files = conn.execute('''
+    files = execute_query('''
         SELECT id, filename, file_path
         FROM files
-        WHERE course_id = ?
-    ''', [course_id]).fetchall()
+        WHERE course_id = %s
+    ''', [course_id])
 
     result = {
-        'id': course[0],
-        'title': course[1],
-        'description': course[2],
-        'content_richtext': course[3],
-        'lyrics': course[4],
-        'audio': course[5],
-        'created_at': str(course[6]),
-        'files': [{'id': f[0], 'filename': f[1], 'file_path': f[2]} for f in files]
+        'id': course['id'],
+        'title': course['title'],
+        'description': course['description'],
+        'content_richtext': course['content_richtext'],
+        'lyrics': course['lyrics'],
+        'audio': course['audio'],
+        'created_at': str(course['created_at']),
+        'files': [{'id': f['id'], 'filename': f['filename'], 'file_path': f['file_path']} for f in files]
     }
 
-    conn.close()
     return jsonify({'course': result})
 
 @app.route('/api/courses', methods=['POST'])
@@ -955,31 +941,27 @@ def delete_course(course_id):
 @admin_required
 def get_students():
     """Get all students (admin only)"""
-    conn = get_connection()
-    students = conn.execute('''
+    students = execute_query('''
         SELECT id, email
         FROM users
         WHERE role = 'student'
         ORDER BY email
-    ''').fetchall()
-    conn.close()
+    ''')
 
-    return jsonify({'students': [{'id': s[0], 'email': s[1]} for s in students]})
+    return jsonify({'students': [{'id': s['id'], 'email': s['email']} for s in students]})
 
 @app.route('/api/courses/<int:course_id>/assignments', methods=['GET'])
 @admin_required
 def get_course_assignments(course_id):
     """Get students assigned to a course (admin only)"""
-    conn = get_connection()
-    assignments = conn.execute('''
+    assignments = execute_query('''
         SELECT u.id, u.email
         FROM users u
         JOIN assigned_courses ac ON u.id = ac.user_id
-        WHERE ac.course_id = ?
-    ''', [course_id]).fetchall()
-    conn.close()
+        WHERE ac.course_id = %s
+    ''', [course_id])
 
-    return jsonify({'students': [{'id': s[0], 'email': s[1]} for s in assignments]})
+    return jsonify({'students': [{'id': s['id'], 'email': s['email']} for s in assignments]})
 
 @app.route('/api/courses/<int:course_id>/assign', methods=['POST'])
 @admin_required
@@ -990,16 +972,12 @@ def assign_course(course_id):
 
     logger.info(f"Assigning course | Course ID: {course_id} | Students: {len(student_ids)}")
 
-    conn = get_connection()
-
     # First, remove all existing assignments for this course
     log_database_operation('DELETE', 'assigned_courses', f'Clear existing assignments for course: {course_id}')
-    conn.execute('DELETE FROM assigned_courses WHERE course_id = ?', [course_id])
+    execute_query('DELETE FROM assigned_courses WHERE course_id = %s', [course_id])
 
     # If no students selected, just clear assignments and return
     if not student_ids:
-        conn.commit()
-        conn.close()
         logger.info(f"✓ All assignments cleared | Course ID: {course_id}")
         return jsonify({'message': 'All assignments cleared'})
 
@@ -1009,29 +987,15 @@ def assign_course(course_id):
         try:
             log_database_operation('INSERT', 'assigned_courses', f'Student: {student_id}, Course: {course_id}')
             
-            # Check if we're using PostgreSQL or DuckDB for proper ID handling
-            from backend.database import use_postgres
-            if use_postgres():
-                conn.execute('''
-                    INSERT INTO assigned_courses (id, user_id, course_id)
-                    VALUES (nextval('assigned_courses_id_seq'), ?, ?)
-                ''', [student_id, course_id])
-            else:
-                # DuckDB - calculate next ID manually
-                max_id_result = conn.execute('SELECT COALESCE(MAX(id), 0) FROM assigned_courses').fetchone()
-                next_id = (max_id_result[0] if max_id_result else 0) + 1
-                
-                conn.execute('''
-                    INSERT INTO assigned_courses (id, user_id, course_id)
-                    VALUES (?, ?, ?)
-                ''', [next_id, student_id, course_id])
+            # PostgreSQL uses sequences for auto-increment IDs
+            execute_query('''
+                INSERT INTO assigned_courses (user_id, course_id)
+                VALUES (%s, %s)
+            ''', [student_id, course_id])
             
             assigned_count += 1
         except Exception as e:
             logger.debug(f"Skip assignment (may already exist): Student {student_id} to Course {course_id}")
-
-    conn.commit()
-    conn.close()
 
     log_assignment_operation(course_id, student_ids, 'assign')
     logger.info(f"✓ Course assigned successfully | Course ID: {course_id} | Assigned: {assigned_count} students")
@@ -1068,30 +1032,17 @@ def upload_file(course_id):
         log_file_operation('UPLOAD', file.filename, f'Course ID: {course_id}, Size: {file_size} bytes')
 
         # Save file info to database
-        conn = get_connection()
         log_database_operation('INSERT', 'files', f'File: {file.filename}, Course: {course_id}')
         
-        # Check if we're using PostgreSQL or DuckDB for proper ID handling
-        from backend.database import use_postgres
-        if use_postgres():
-            conn.execute('''
-                INSERT INTO files (id, course_id, filename, file_path)
-                VALUES (nextval('files_id_seq'), ?, ?, ?)
-            ''', [course_id, file.filename, filepath])
-        else:
-            # DuckDB - calculate next ID manually
-            max_id_result = conn.execute('SELECT COALESCE(MAX(id), 0) FROM files').fetchone()
-            next_id = (max_id_result[0] if max_id_result else 0) + 1
-            
-            conn.execute('''
-                INSERT INTO files (id, course_id, filename, file_path)
-                VALUES (?, ?, ?, ?)
-            ''', [next_id, course_id, file.filename, filepath])
+        # PostgreSQL uses sequences for auto-increment IDs
+        execute_query('''
+            INSERT INTO files (course_id, filename, file_path)
+            VALUES (%s, %s, %s)
+        ''', [course_id, file.filename, filepath])
         
-        conn.commit()
-
-        file_id = conn.execute('SELECT MAX(id) FROM files').fetchone()[0]
-        conn.close()
+        # Get the inserted file ID
+        file_result = execute_query('SELECT MAX(id) as id FROM files', fetch_one=True)
+        file_id = file_result['id']
 
         logger.info(f"✓ File uploaded successfully | File: {file.filename} | Course ID: {course_id} | Size: {file_size} bytes")
 
@@ -1113,16 +1064,14 @@ def delete_file(file_id):
     """Delete a file (admin only)"""
     logger.info(f"File deletion request | File ID: {file_id}")
 
-    conn = get_connection()
     log_database_operation('SELECT', 'files', f'Get file path for ID: {file_id}')
-    file = conn.execute('SELECT file_path FROM files WHERE id = ?', [file_id]).fetchone()
+    file = execute_query('SELECT file_path FROM files WHERE id = %s', [file_id], fetch_one=True)
 
     if not file:
-        conn.close()
         logger.warning(f"✗ File deletion failed: File not found | File ID: {file_id}")
         return jsonify({'error': 'File not found'}), 404
 
-    file_path = file[0]
+    file_path = file['file_path']
 
     # Delete from filesystem
     try:
@@ -1134,9 +1083,7 @@ def delete_file(file_id):
 
     # Delete from database
     log_database_operation('DELETE', 'files', f'File ID: {file_id}')
-    conn.execute('DELETE FROM files WHERE id = ?', [file_id])
-    conn.commit()
-    conn.close()
+    execute_query('DELETE FROM files WHERE id = %s', [file_id])
 
     logger.info(f"✓ File deleted successfully | File ID: {file_id} | Path: {file_path}")
 
@@ -1146,32 +1093,27 @@ def delete_file(file_id):
 @login_required
 def download_file(file_id):
     """Download a file"""
-    conn = get_connection()
-    file = conn.execute('''
+    file = execute_query('''
         SELECT f.file_path, f.filename, f.course_id
         FROM files f
-        WHERE f.id = ?
-    ''', [file_id]).fetchone()
+        WHERE f.id = %s
+    ''', [file_id], fetch_one=True)
 
     if not file:
-        conn.close()
         return jsonify({'error': 'File not found'}), 404
 
     # Check if student has access to this course
     if session.get('role') == 'student':
-        access = conn.execute('''
-            SELECT COUNT(*) FROM assigned_courses
-            WHERE user_id = ? AND course_id = ?
-        ''', [session['user_id'], file[2]]).fetchone()
+        access = execute_query('''
+            SELECT COUNT(*) as count FROM assigned_courses
+            WHERE user_id = %s AND course_id = %s
+        ''', [session['user_id'], file['course_id']], fetch_one=True)
 
-        if access[0] == 0:
-            conn.close()
+        if access['count'] == 0:
             return jsonify({'error': 'Access denied'}), 403
 
-    conn.close()
-
     try:
-        return send_file(file[0], as_attachment=True, download_name=file[1])
+        return send_file(file['file_path'], as_attachment=True, download_name=file['filename'])
     except:
         return jsonify({'error': 'File not found on server'}), 404
 
@@ -1198,24 +1140,21 @@ def admin_environment():
 def get_user_credentials_admin():
     """Get all user credentials including hashed passwords (admin only - for debugging)"""
     try:
-        conn = get_connection()
-        users = conn.execute('''
+        users = execute_query('''
             SELECT id, email, hashed_password, role, created_at
             FROM users
             ORDER BY id
-        ''').fetchall()
+        ''')
         
         result = []
         for user in users:
             result.append({
-                'id': user[0],
-                'email': user[1],
-                'hashed_password': user[2],  # Include hashed password for admin view
-                'role': user[3],
-                'created_at': str(user[4]) if user[4] else None
+                'id': user['id'],
+                'email': user['email'],
+                'hashed_password': user['hashed_password'],  # Include hashed password for admin view
+                'role': user['role'],
+                'created_at': str(user['created_at']) if user['created_at'] else None
             })
-        
-        conn.close()
         return jsonify({'users': result})
         
     except Exception as e:
