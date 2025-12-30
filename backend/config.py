@@ -10,15 +10,20 @@ class Config:
     # Secret key for sessions
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
 
-    # Database configuration
-    # In serverless environments, use memory database or persistent storage
+    # PostgreSQL Database configuration
+    DATABASE_URL = os.environ.get('DATABASE_URL')
+    
+    # Individual database components (fallback if DATABASE_URL not set)
+    DB_HOST = os.environ.get('DB_HOST')
+    DB_PORT = os.environ.get('DB_PORT', '5432')
+    DB_NAME = os.environ.get('DB_NAME')
+    DB_USER = os.environ.get('DB_USER')
+    DB_PASSWORD = os.environ.get('DB_PASSWORD')
+    
+    # File upload configuration
     if os.environ.get('VERCEL') == '1':
-        # For Vercel, use a persistent database path in /tmp (which persists during function execution)
-        DB_PATH = os.environ.get('DB_PATH') or '/tmp/student_courses.db'
         UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or '/tmp/uploads'
     else:
-        # For local development, use relative paths
-        DB_PATH = os.environ.get('DB_PATH') or 'student_courses.db'
         UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or 'uploads'
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16MB default
 
@@ -45,9 +50,8 @@ class ProductionConfig(Config):
     # Falls back to a warning message if not set
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'INSECURE-CHANGE-THIS-IN-PRODUCTION'
 
-    # For Vercel/serverless, use /tmp directory
+    # For Vercel, use /tmp directory for uploads
     if os.environ.get('VERCEL'):
-        DB_PATH = '/tmp/student_courses.db'
         UPLOAD_FOLDER = '/tmp/uploads'
 
     # Allow all origins in production (or specify your domain)
@@ -56,7 +60,8 @@ class ProductionConfig(Config):
 class TestingConfig(Config):
     """Testing configuration"""
     TESTING = True
-    DB_PATH = ':memory:'  # In-memory database for tests
+    # Use a test database for testing
+    DATABASE_URL = os.environ.get('TEST_DATABASE_URL') or 'postgresql://test:test@localhost/test_sloka'
 
 # Configuration dictionary
 config = {
