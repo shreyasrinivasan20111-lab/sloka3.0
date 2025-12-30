@@ -7,6 +7,7 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from werkzeug.security import generate_password_hash
+import traceback
 from backend.logger import logger
 
 def get_connection():
@@ -42,6 +43,7 @@ def get_connection():
         
     except Exception as e:
         logger.error(f"❌ PostgreSQL connection failed: {str(e)}")
+        logger.error(f"Stack trace:\n{traceback.format_exc()}")
         raise
 
 def init_database():
@@ -166,6 +168,7 @@ def init_database():
         
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
+        logger.error(f"Stack trace:\n{traceback.format_exc()}")
         if conn:
             conn.rollback()
             conn.close()
@@ -221,6 +224,7 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=None):
         
     except Exception as e:
         logger.error(f"Database query error: {str(e)} | Query: {query[:100]}...")
+        logger.error(f"Stack trace:\n{traceback.format_exc()}")
         if conn:
             conn.rollback()
         if cursor:
@@ -243,3 +247,4 @@ if __name__ == '__main__':
         logger.info("✅ Database test successful")
     except Exception as e:
         logger.error(f"❌ Database test failed: {e}")
+        logger.error(f"Stack trace:\n{traceback.format_exc()}")

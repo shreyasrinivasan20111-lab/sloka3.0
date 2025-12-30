@@ -9,6 +9,11 @@ venv/
 ENV/
 .venv
 
+# Environment Files
+.env.local
+.env.production
+.env
+
 # Database
 *.db
 *.db-shm

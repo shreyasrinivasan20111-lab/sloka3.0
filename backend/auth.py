@@ -1,6 +1,7 @@
 from functools import wraps
 from flask import session, jsonify
 from werkzeug.security import check_password_hash
+import traceback
 from backend.database import get_connection, use_postgres, execute_query
 from backend.logger import logger
 import os
@@ -47,6 +48,7 @@ def verify_user(email, password):
             
     except Exception as e:
         logger.error(f"Authentication error for {email}: {str(e)}")
+        logger.error(f"Stack trace:\n{traceback.format_exc()}")
         return None
 
 def get_current_user():
@@ -73,4 +75,5 @@ def get_current_user():
             
     except Exception as e:
         logger.error(f"Error getting current user: {str(e)}")
+        logger.error(f"Stack trace:\n{traceback.format_exc()}")
         return None

@@ -4,6 +4,7 @@ from werkzeug.utils import secure_filename
 import os
 import time
 import json
+import traceback
 from backend.database import get_connection, init_database, use_postgres, execute_query
 from backend.auth import login_required, admin_required, verify_user, get_current_user
 from backend.config import get_config
@@ -18,6 +19,12 @@ from backend.logger import (
     log_session_activity,
     get_user_info
 )
+
+# Helper function for logging exceptions with stack traces
+def log_exception(message, exception):
+    """Log an exception with full stack trace for better debugging"""
+    logger.error(f"{message}: {str(exception)}")
+    logger.error(f"Stack trace:\n{traceback.format_exc()}")
 
 # Get configuration
 config = get_config()
@@ -65,6 +72,7 @@ def before_request():
     except Exception as e:
         # Don't let middleware errors break the request
         print(f"Before request middleware error: {str(e)}")
+        print(f"Stack trace:\n{traceback.format_exc()}")
         request.start_time = time.time()  # Ensure this is set
         pass
 
@@ -97,6 +105,7 @@ def after_request(response):
     except Exception as e:
         # Don't let middleware errors break the response
         print(f"Middleware error: {str(e)}")
+        print(f"Stack trace:\n{traceback.format_exc()}")
         pass
 
     return response
@@ -131,6 +140,7 @@ def login():
             logger.info("Database tables verified for login")
         except Exception as db_error:
             logger.error(f"Database initialization failed during login: {str(db_error)}")
+            logger.error(f"Stack trace:\n{traceback.format_exc()}")
             return jsonify({'error': 'Service temporarily unavailable'}), 503
 
         user = verify_user(email, password)
@@ -167,6 +177,7 @@ def login():
     
     except Exception as e:
         logger.error(f"Login error: {str(e)}", exc_info=True)
+        logger.error(f"Stack trace:\n{traceback.format_exc()}")
         return jsonify({'error': 'Internal server error during login'}), 500
 
 @app.route('/api/signup', methods=['POST'])
@@ -199,6 +210,7 @@ def signup():
             logger.info("Database tables verified for signup")
         except Exception as db_error:
             logger.error(f"Database initialization failed during signup: {str(db_error)}")
+            logger.error(f"Stack trace:\n{traceback.format_exc()}")
             return jsonify({'error': 'Service temporarily unavailable'}), 503
 
         # Check if email already exists
@@ -251,7 +263,7 @@ def signup():
         }), 201
     
     except Exception as e:
-        logger.error(f"Signup error: {str(e)}", exc_info=True)
+        log_exception("Signup error", e)
         return jsonify({'error': 'Internal server error during signup'}), 500
 
 @app.route('/api/logout', methods=['POST'])
@@ -267,7 +279,7 @@ def logout():
         return jsonify({'message': 'Logged out successfully'})
     
     except Exception as e:
-        logger.error(f"Logout error: {str(e)}", exc_info=True)
+        log_exception("Logout error", e)
         # Still clear session even if logging fails
         try:
             session.clear()
@@ -425,15 +437,7 @@ def check_auth():
             return jsonify({'authenticated': False}), 200
     
     except Exception as e:
-        # Ultimate fallback - log error safely and return unauthenticated
-        try:
-            import sys
-            import traceback
-            error_msg = f"Check-auth critical error: {str(e)}"
-            print(error_msg, file=sys.stderr)
-            print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
-        except:
-            pass
+        log_exception("Check-auth critical error", e)
         
         # Clear session as last resort
         try:
@@ -552,7 +556,7 @@ def sync_database():
         }), 200
             
     except Exception as e:
-        logger.error(f"Database sync check error: {str(e)}")
+        log_exception("Database sync check error", e)
         return jsonify({
             'message': 'PostgreSQL database is automatically persistent',
             'note': 'Vercel PostgreSQL handles persistence automatically'
@@ -764,36 +768,41 @@ def get_course(course_id):
 @admin_required
 def create_course():
     """Create a new course (admin only)"""
-    data = request.json
-    title = data.get('title')
-    description = data.get('description', '')
-    content_richtext = data.get('content_richtext', '')
-    lyrics = data.get('lyrics', '')
-    audio = data.get('audio', '')
+    try:
+        data = request.json
+        title = data.get('title')
+        description = data.get('description', '')
+        content_richtext = data.get('content_richtext', '')
+        lyrics = data.get('lyrics', '')
+        audio = data.get('audio', '')
 
-    logger.info(f"Creating new course | Title: {title}")
-    logger.info(f"Course creation data: title='{title}', description='{description}', content_richtext='{content_richtext[:100] if content_richtext else None}', lyrics='{lyrics[:100] if lyrics else None}', audio='{audio[:100] if audio else None}'")
+        logger.info(f"Creating new course | Title: {title}")
+        logger.info(f"Course creation data: title='{title}', description='{description}', content_richtext='{content_richtext[:100] if content_richtext else None}', lyrics='{lyrics[:100] if lyrics else None}', audio='{audio[:100] if audio else None}'")
 
-    if not title:
-        logger.warning(f"Course creation failed: Title required")
-        return jsonify({'error': 'Title is required'}), 400
+        if not title:
+            logger.warning(f"Course creation failed: Title required")
+            return jsonify({'error': 'Title is required'}), 400
 
-    log_database_operation('INSERT', 'courses', f'Title: {title}')
+        log_database_operation('INSERT', 'courses', f'Title: {title}')
+        
+        # PostgreSQL handles auto-increment IDs automatically
+        execute_query('''
+            INSERT INTO courses (title, description, content_richtext, lyrics, audio)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', [title, description, content_richtext, lyrics, audio])
+        
+        # Get the newly created course ID
+        course_result = execute_query('SELECT id FROM courses WHERE title = %s ORDER BY id DESC LIMIT 1', [title], fetch_one=True)
+        course_id = course_result['id'] if course_result else None
+
+        log_course_operation('CREATE', course_id, title)
+        logger.info(f"✓ Course created successfully | ID: {course_id} | Title: {title}")
+
+        return jsonify({'message': 'Course created', 'course_id': course_id}), 201
     
-    # PostgreSQL handles auto-increment IDs automatically
-    execute_query('''
-        INSERT INTO courses (title, description, content_richtext, lyrics, audio)
-        VALUES (%s, %s, %s, %s, %s)
-    ''', [title, description, content_richtext, lyrics, audio])
-    
-    # Get the newly created course ID
-    course_result = execute_query('SELECT id FROM courses WHERE title = %s ORDER BY id DESC LIMIT 1', [title], fetch_one=True)
-    course_id = course_result['id'] if course_result else None
-
-    log_course_operation('CREATE', course_id, title)
-    logger.info(f"✓ Course created successfully | ID: {course_id} | Title: {title}")
-
-    return jsonify({'message': 'Course created', 'course_id': course_id}), 201
+    except Exception as e:
+        log_exception("Course creation error", e)
+        return jsonify({'error': 'Internal server error during course creation'}), 500
 
 @app.route('/api/courses/<int:course_id>', methods=['PUT'])
 @admin_required
