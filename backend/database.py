@@ -180,6 +180,50 @@ def get_unified_db_path():
     database_url = os.environ.get('DATABASE_URL', 'PostgreSQL via DATABASE_URL')
     return database_url
 
+def execute_query(query, params=None, fetch_one=False, fetch_all=False):
+    """
+    Execute a query and return results
+    Handles both PostgreSQL cursor-based and direct execution patterns
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Execute the query
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+        
+        # Handle different return types
+        if fetch_one:
+            result = cursor.fetchone()
+        elif fetch_all:
+            result = cursor.fetchall()
+        else:
+            result = None
+            
+        # Commit for write operations
+        if query.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP')):
+            conn.commit()
+            
+        cursor.close()
+        conn.close()
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Database query error: {str(e)} | Query: {query[:100]}...")
+        if conn:
+            conn.rollback()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+        raise
+
 def use_postgres():
     """Always return True since we only use PostgreSQL now"""
     return True

@@ -4,7 +4,7 @@ from werkzeug.utils import secure_filename
 import os
 import time
 import json
-from backend.database import get_connection, init_database, use_postgres
+from backend.database import get_connection, init_database, use_postgres, execute_query
 from backend.auth import login_required, admin_required, verify_user, get_current_user
 from backend.config import get_config
 from backend.logger import (
@@ -202,11 +202,9 @@ def signup():
             return jsonify({'error': 'Service temporarily unavailable'}), 503
 
         # Check if email already exists
-        conn = get_connection()
         log_database_operation('SELECT', 'users', f'Check existing email: {email}')
-        existing = conn.execute('SELECT id FROM users WHERE email = ?', [email]).fetchone()
+        existing = execute_query('SELECT id FROM users WHERE email = %s', [email], fetch_one=True)
         if existing:
-            conn.close()
             log_authentication('SIGNUP', email, False, 'Email already registered')
             logger.warning(f"✗ Signup failed: Email already exists | Email: {email}")
             return jsonify({'error': 'Email already registered'}), 400
@@ -217,29 +215,15 @@ def signup():
 
         log_database_operation('INSERT', 'users', f'New student account: {email}')
         
-        # Check if we're using PostgreSQL or DuckDB for proper ID handling
-        from backend.database import use_postgres
-        if use_postgres():
-            conn.execute('''
-                INSERT INTO users (id, email, hashed_password, role)
-                VALUES (nextval('users_id_seq'), ?, ?, 'student')
-            ''', [email, hashed_password])
-        else:
-            # DuckDB - calculate next ID manually
-            max_id_result = conn.execute('SELECT COALESCE(MAX(id), 0) FROM users').fetchone()
-            next_id = (max_id_result[0] if max_id_result else 0) + 1
-            
-            conn.execute('''
-                INSERT INTO users (id, email, hashed_password, role)
-                VALUES (?, ?, ?, 'student')
-            ''', [next_id, email, hashed_password])
+        # PostgreSQL handles auto-increment IDs automatically
+        execute_query('''
+            INSERT INTO users (email, hashed_password, role)
+            VALUES (%s, %s, 'student')
+        ''', [email, hashed_password])
         
-        conn.commit()
-
         # Get the new user ID
-        user_id = conn.execute('SELECT MAX(id) FROM users').fetchone()[0]
-        
-        conn.close()
+        user = execute_query('SELECT id FROM users WHERE email = %s', [email], fetch_one=True)
+        user_id = user['id']
 
         # Clear any existing session first, then auto-login after signup
         session.clear()

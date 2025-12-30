@@ -1,7 +1,7 @@
 from functools import wraps
 from flask import session, jsonify
 from werkzeug.security import check_password_hash
-from backend.database import get_connection
+from backend.database import get_connection, use_postgres, execute_query
 from backend.logger import logger
 import os
 
@@ -28,19 +28,18 @@ def admin_required(f):
 def verify_user(email, password):
     """Verify user credentials and return user data if valid"""
     try:
-        conn = get_connection()
-        result = conn.execute(
-            'SELECT id, email, hashed_password, role FROM users WHERE email = ?',
-            [email]
-        ).fetchone()
-        conn.close()
+        result = execute_query(
+            'SELECT id, email, hashed_password, role FROM users WHERE email = %s',
+            [email], 
+            fetch_one=True
+        )
 
-        if result and check_password_hash(result[2], password):
+        if result and check_password_hash(result['hashed_password'], password):
             logger.info(f"User authentication successful: {email}")
             return {
-                'id': result[0],
-                'email': result[1],
-                'role': result[3]
+                'id': result['id'],
+                'email': result['email'],
+                'role': result['role']
             }
         else:
             logger.warning(f"User authentication failed: {email} - {'User not found' if not result else 'Invalid password'}")
@@ -56,18 +55,17 @@ def get_current_user():
         return None
 
     try:
-        conn = get_connection()
-        result = conn.execute(
-            'SELECT id, email, role FROM users WHERE id = ?',
-            [session['user_id']]
-        ).fetchone()
-        conn.close()
+        result = execute_query(
+            'SELECT id, email, role FROM users WHERE id = %s',
+            [session['user_id']],
+            fetch_one=True
+        )
 
         if result:
             return {
-                'id': result[0],
-                'email': result[1],
-                'role': result[2]
+                'id': result['id'],
+                'email': result['email'],
+                'role': result['role']
             }
         else:
             logger.warning(f"User not found for session user_id: {session['user_id']}")
