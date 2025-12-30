@@ -635,7 +635,11 @@ def get_all_users_admin():
             SELECT id, email, role, created_at
             FROM users
             ORDER BY id
-        ''')
+        ''', fetch_all=True)
+        
+        # Handle case where no users exist
+        if not users:
+            users = []
         
         result = []
         for user in users:
@@ -663,7 +667,11 @@ def get_all_assignments_admin():
             JOIN users u ON ac.user_id = u.id
             JOIN courses c ON ac.course_id = c.id
             ORDER BY ac.id
-        ''')
+        ''', fetch_all=True)
+        
+        # Handle case where no assignments exist
+        if not assignments:
+            assignments = []
         
         result = []
         for assignment in assignments:
@@ -691,7 +699,11 @@ def get_all_files_admin():
             FROM files f
             JOIN courses c ON f.course_id = c.id
             ORDER BY f.id
-        ''')
+        ''', fetch_all=True)
+        
+        # Handle case where no files exist
+        if not files:
+            files = []
         
         result = []
         for file in files:
@@ -787,7 +799,11 @@ def get_course(course_id):
         SELECT id, filename, file_path
         FROM files
         WHERE course_id = %s
-    ''', [course_id])
+    ''', [course_id], fetch_all=True)
+
+    # Handle case where no files exist
+    if not files:
+        files = []
 
     result = {
         'id': course['id'],
@@ -946,7 +962,11 @@ def get_students():
         FROM users
         WHERE role = 'student'
         ORDER BY email
-    ''')
+    ''', fetch_all=True)
+
+    # Handle case where no students exist
+    if not students:
+        students = []
 
     return jsonify({'students': [{'id': s['id'], 'email': s['email']} for s in students]})
 
@@ -959,7 +979,11 @@ def get_course_assignments(course_id):
         FROM users u
         JOIN assigned_courses ac ON u.id = ac.user_id
         WHERE ac.course_id = %s
-    ''', [course_id])
+    ''', [course_id], fetch_all=True)
+
+    # Handle case where no assignments exist
+    if not assignments:
+        assignments = []
 
     return jsonify({'students': [{'id': s['id'], 'email': s['email']} for s in assignments]})
 
@@ -1144,8 +1168,12 @@ def get_user_credentials_admin():
             SELECT id, email, hashed_password, role, created_at
             FROM users
             ORDER BY id
-        ''')
+        ''', fetch_all=True)
         
+        # Handle case where no users exist
+        if not users:
+            users = []
+            
         result = []
         for user in users:
             result.append({

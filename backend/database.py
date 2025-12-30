@@ -180,10 +180,11 @@ def get_unified_db_path():
     database_url = os.environ.get('DATABASE_URL', 'PostgreSQL via DATABASE_URL')
     return database_url
 
-def execute_query(query, params=None, fetch_one=False, fetch_all=False):
+def execute_query(query, params=None, fetch_one=False, fetch_all=None):
     """
     Execute a query and return results
     Handles both PostgreSQL cursor-based and direct execution patterns
+    Defaults to fetch_all=True for SELECT statements, unless fetch_one=True is specified
     """
     conn = None
     cursor = None
@@ -197,16 +198,20 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False):
         else:
             cursor.execute(query)
         
+        # Auto-detect if we should fetch results based on query type
+        query_upper = query.strip().upper()
+        is_select = query_upper.startswith('SELECT')
+        
         # Handle different return types
         if fetch_one:
             result = cursor.fetchone()
-        elif fetch_all:
+        elif fetch_all is True or (fetch_all is None and is_select):
             result = cursor.fetchall()
         else:
             result = None
             
         # Commit for write operations
-        if query.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP')):
+        if query_upper.startswith(('INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP')):
             conn.commit()
             
         cursor.close()
