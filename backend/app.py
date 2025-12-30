@@ -834,30 +834,17 @@ def create_course():
         logger.warning(f"Course creation failed: Title required")
         return jsonify({'error': 'Title is required'}), 400
 
-    conn = get_connection()
     log_database_operation('INSERT', 'courses', f'Title: {title}')
     
-    # Check if we're using PostgreSQL or DuckDB for proper ID handling
-    from backend.database import use_postgres
-    if use_postgres():
-        conn.execute('''
-            INSERT INTO courses (id, title, description, content_richtext, lyrics, audio)
-            VALUES (nextval('courses_id_seq'), ?, ?, ?, ?, ?)
-        ''', [title, description, content_richtext, lyrics, audio])
-        course_id = conn.execute('SELECT MAX(id) FROM courses').fetchone()[0]
-    else:
-        # DuckDB - calculate next ID manually
-        max_id_result = conn.execute('SELECT COALESCE(MAX(id), 0) FROM courses').fetchone()
-        next_id = (max_id_result[0] if max_id_result else 0) + 1
-        
-        conn.execute('''
-            INSERT INTO courses (id, title, description, content_richtext, lyrics, audio)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', [next_id, title, description, content_richtext, lyrics, audio])
-        course_id = next_id
+    # PostgreSQL handles auto-increment IDs automatically
+    execute_query('''
+        INSERT INTO courses (title, description, content_richtext, lyrics, audio)
+        VALUES (%s, %s, %s, %s, %s)
+    ''', [title, description, content_richtext, lyrics, audio])
     
-    conn.commit()
-    conn.close()
+    # Get the newly created course ID
+    course_result = execute_query('SELECT id FROM courses WHERE title = %s ORDER BY id DESC LIMIT 1', [title], fetch_one=True)
+    course_id = course_result['id'] if course_result else None
 
     log_course_operation('CREATE', course_id, title)
     logger.info(f"✓ Course created successfully | ID: {course_id} | Title: {title}")
@@ -878,13 +865,10 @@ def update_course(course_id):
     logger.info(f"Updating course | ID: {course_id} | New title: {title}")
     logger.info(f"Course update data: title='{title}', description='{description}', content_richtext='{content_richtext[:100] if content_richtext else None}', lyrics='{lyrics[:100] if lyrics else None}', audio='{audio[:100] if audio else None}'")
 
-    conn = get_connection()
-
     # Check if course exists
     log_database_operation('SELECT', 'courses', f'Check course exists: {course_id}')
-    course = conn.execute('SELECT id FROM courses WHERE id = ?', [course_id]).fetchone()
+    course = execute_query('SELECT id FROM courses WHERE id = %s', [course_id], fetch_one=True)
     if not course:
-        conn.close()
         logger.warning(f"✗ Course update failed: Course not found | ID: {course_id}")
         return jsonify({'error': 'Course not found'}), 404
 
@@ -893,34 +877,23 @@ def update_course(course_id):
     
     try:
         # Execute the update
-        result = conn.execute('''
+        execute_query('''
             UPDATE courses
-            SET title = ?, description = ?, content_richtext = ?, lyrics = ?, audio = ?
-            WHERE id = ?
+            SET title = %s, description = %s, content_richtext = %s, lyrics = %s, audio = %s
+            WHERE id = %s
         ''', [title, description, content_richtext, lyrics, audio, course_id])
         
-        # Log number of rows affected
-        rows_affected = result.rowcount if hasattr(result, 'rowcount') else "unknown"
-        logger.info(f"Database UPDATE executed | Rows affected: {rows_affected}")
-        
-        # Commit the transaction
-        conn.commit()
-        logger.info(f"Database COMMIT executed")
+        logger.info(f"Database UPDATE executed successfully")
         
         # Verify the update by reading back the data
-        verify_result = conn.execute('SELECT title, description, content_richtext, lyrics, audio FROM courses WHERE id = ?', [course_id]).fetchone()
+        verify_result = execute_query('SELECT title, description, content_richtext, lyrics, audio FROM courses WHERE id = %s', [course_id], fetch_one=True)
         if verify_result:
-            logger.info(f"Verification: title='{verify_result[0]}', description='{verify_result[1]}', content_richtext length={len(verify_result[2] or '')}, lyrics length={len(verify_result[3] or '')}, audio length={len(verify_result[4] or '')}")
+            logger.info(f"Verification: title='{verify_result['title']}', description='{verify_result['description']}', content_richtext length={len(verify_result['content_richtext'] or '')}, lyrics length={len(verify_result['lyrics'] or '')}, audio length={len(verify_result['audio'] or '')}")
         else:
             logger.error(f"Verification failed: Course {course_id} not found after update")
         
-        conn.close()
-        logger.info(f"Database connection closed")
-        
     except Exception as e:
         logger.error(f"Database update failed: {str(e)}")
-        conn.rollback()
-        conn.close()
         return jsonify({'error': 'Failed to update course'}), 500
 
     log_course_operation('UPDATE', course_id, title)
@@ -935,46 +908,40 @@ def delete_course(course_id):
     logger.info(f"Deleting course | ID: {course_id}")
 
     try:
-        conn = get_connection()
-
         # First, check if course exists
-        course = conn.execute('SELECT title FROM courses WHERE id = ?', [course_id]).fetchone()
+        course = execute_query('SELECT title FROM courses WHERE id = %s', [course_id], fetch_one=True)
         if not course:
-            conn.close()
             logger.warning(f"✗ Course not found | ID: {course_id}")
             return jsonify({'error': 'Course not found'}), 404
 
         # Delete course files from filesystem
         log_database_operation('SELECT', 'files', f'Get files for course: {course_id}')
-        files = conn.execute('SELECT id, file_path FROM files WHERE course_id = ?', [course_id]).fetchall()
-        for file in files:
+        files = execute_query('SELECT id, file_path FROM files WHERE course_id = %s', [course_id], fetch_all=True)
+        for file in files or []:
             try:
-                if os.path.exists(file[1]):
-                    os.remove(file[1])
-                    log_file_operation('DELETE', file[1], f'Course deletion cleanup')
-                    logger.debug(f"Deleted file: {file[1]}")
+                if os.path.exists(file['file_path']):
+                    os.remove(file['file_path'])
+                    log_file_operation('DELETE', file['file_path'], f'Course deletion cleanup')
+                    logger.debug(f"Deleted file: {file['file_path']}")
             except Exception as e:
-                logger.warning(f"Failed to delete file: {file[1]} | Error: {str(e)}")
+                logger.warning(f"Failed to delete file: {file['file_path']} | Error: {str(e)}")
 
         # Delete related records first (in correct order to avoid foreign key constraints)
         
         # 1. Delete files from database
         log_database_operation('DELETE', 'files', f'All files for course: {course_id}')
-        conn.execute('DELETE FROM files WHERE course_id = ?', [course_id])
+        execute_query('DELETE FROM files WHERE course_id = %s', [course_id])
         
         # 2. Delete course assignments
         log_database_operation('DELETE', 'assigned_courses', f'All assignments for course: {course_id}')
-        conn.execute('DELETE FROM assigned_courses WHERE course_id = ?', [course_id])
+        execute_query('DELETE FROM assigned_courses WHERE course_id = %s', [course_id])
         
         # 3. Finally delete the course
         log_database_operation('DELETE', 'courses', f'Course ID: {course_id}')
-        conn.execute('DELETE FROM courses WHERE id = ?', [course_id])
-        
-        conn.commit()
-        conn.close()
+        execute_query('DELETE FROM courses WHERE id = %s', [course_id])
 
         log_course_operation('DELETE', course_id)
-        logger.info(f"✓ Course deleted successfully | ID: {course_id} | Title: {course[0]}")
+        logger.info(f"✓ Course deleted successfully | ID: {course_id} | Title: {course['title']}")
 
         return jsonify({'message': 'Course deleted successfully'})
         
