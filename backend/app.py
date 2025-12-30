@@ -731,47 +731,43 @@ def get_all_files_admin():
 @login_required
 def get_courses():
     """Get all courses (admin) or assigned courses (student)"""
-    conn = get_connection()
-
+    
     if session.get('role') == 'admin':
         # Admin sees all courses
-        courses = conn.execute('''
+        courses = execute_query('''
             SELECT c.id, c.title, c.description, c.content_richtext, c.lyrics, c.audio, c.created_at
             FROM courses c
             ORDER BY c.created_at DESC
-        ''').fetchall()
+        ''', fetch_all=True)
     else:
         # Students see only assigned courses
-        courses = conn.execute('''
+        courses = execute_query('''
             SELECT c.id, c.title, c.description, c.content_richtext, c.lyrics, c.audio, c.created_at
             FROM courses c
             JOIN assigned_courses ac ON c.id = ac.course_id
-            WHERE ac.user_id = ?
+            WHERE ac.user_id = %s
             ORDER BY c.created_at DESC
-        ''', [session['user_id']]).fetchall()
+        ''', [session['user_id']], fetch_all=True)
 
-    result = []
-    for course in courses:
-        # Get files for this course
-        files = conn.execute('''
-            SELECT id, filename, file_path
-            FROM files
-            WHERE course_id = ?
-        ''', [course[0]]).fetchall()
+    # Get file count for each course
+    course_list = []
+    for course in courses or []:
+        files = execute_query('''
+            SELECT COUNT(*) as count FROM files WHERE course_id = %s
+        ''', [course['id']], fetch_one=True)
 
-        result.append({
-            'id': course[0],
-            'title': course[1],
-            'description': course[2],
-            'content_richtext': course[3],
-            'lyrics': course[4],
-            'audio': course[5],
-            'created_at': str(course[6]),
-            'files': [{'id': f[0], 'filename': f[1], 'file_path': f[2]} for f in files]
+        course_list.append({
+            'id': course['id'],
+            'title': course['title'],
+            'description': course['description'],
+            'content_richtext': course['content_richtext'],
+            'lyrics': course['lyrics'],
+            'audio': course['audio'],
+            'created_at': str(course['created_at']),
+            'file_count': files['count'] if files else 0
         })
 
-    conn.close()
-    return jsonify({'courses': result})
+    return jsonify(course_list)
 
 @app.route('/api/courses/<int:course_id>', methods=['GET'])
 @login_required
