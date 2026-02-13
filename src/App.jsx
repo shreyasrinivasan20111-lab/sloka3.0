@@ -1,8 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { initDB } from './db'
-import { getSession } from './auth'
 
+import HomePage from './pages/HomePage'
 import Login from './pages/Login'
 import StudentDashboard from './pages/StudentDashboard'
 import CourseView from './pages/CourseView'
@@ -12,11 +12,6 @@ import StudentManagement from './pages/admin/StudentManagement'
 import Settings from './pages/admin/Settings'
 import ProtectedRoute from './components/ProtectedRoute'
 
-function RootRedirect() {
-  const session = getSession()
-  if (!session) return <Navigate to="/login" replace />
-  return <Navigate to={session.role === 'admin' ? '/admin' : '/student'} replace />
-}
 
 export default function App() {
   const [dbReady, setDbReady] = useState(false)
@@ -59,7 +54,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<RootRedirect />} />
+        <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<Login />} />
 
         {/* Student routes */}
