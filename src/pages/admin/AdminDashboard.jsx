@@ -166,6 +166,7 @@ export default function AdminDashboard() {
                   <p>No students found. Create students first.</p>
                 </div>
               ) : (
+                <div className="table-responsive">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -198,6 +199,7 @@ export default function AdminDashboard() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </div>

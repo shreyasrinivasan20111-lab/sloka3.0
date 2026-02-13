@@ -112,7 +112,7 @@ export default function StudentManagement() {
         <div className="card" style={{ marginBottom: '24px' }}>
           <div className="card-header"><h3>Create Student Account</h3></div>
           <form onSubmit={handleCreate}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+            <div className="form-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Username</label>
                 <input
@@ -168,6 +168,7 @@ export default function StudentManagement() {
             <p>No students yet. Create the first student account.</p>
           </div>
         ) : (
+          <div className="table-responsive">
           <table className="data-table">
             <thead>
               <tr>
@@ -209,6 +210,7 @@ export default function StudentManagement() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

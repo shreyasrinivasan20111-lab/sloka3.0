@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { getSession, clearSession } from '../auth'
 
 export default function AdminLayout({ children }) {
   const session = getSession()
   const navigate = useNavigate()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   function handleLogout() {
     clearSession()
@@ -18,7 +20,14 @@ export default function AdminLayout({ children }) {
           <img src="/lotus.svg" alt="Sai Kalpataru" />
           Sai Kalpataru Admin
         </div>
-        <div className="navbar-nav">
+        <button
+          className="navbar-hamburger"
+          onClick={() => setMenuOpen(v => !v)}
+          aria-label="Toggle menu"
+        >
+          {menuOpen ? '✕' : '☰'}
+        </button>
+        <div className={`navbar-nav${menuOpen ? ' open' : ''}`}>
           <span className="nav-user">🕉 {session?.username}</span>
           <span className="badge badge-admin">Admin</span>
           <button className="btn btn-secondary btn-sm" onClick={handleLogout} style={{ marginLeft: '8px' }}>

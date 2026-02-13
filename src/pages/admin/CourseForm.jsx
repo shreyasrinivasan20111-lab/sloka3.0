@@ -222,6 +222,7 @@ export default function CourseForm() {
               <div className="card-header">
                 <h3>📎 Existing Attachments</h3>
               </div>
+              <div className="table-responsive">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -248,6 +249,7 @@ export default function CourseForm() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
