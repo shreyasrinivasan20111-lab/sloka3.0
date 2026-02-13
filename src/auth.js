@@ -2,7 +2,7 @@ const SESSION_KEY = 'sai_kalpataru_session'
 
 export function getSession() {
   try {
-    const raw = localStorage.getItem(SESSION_KEY)
+    const raw = sessionStorage.getItem(SESSION_KEY)
     return raw ? JSON.parse(raw) : null
   } catch {
     return null
@@ -10,7 +10,7 @@ export function getSession() {
 }
 
 export function setSession(user) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify({
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({
     id: user.id,
     username: user.username,
     email: user.email,
@@ -19,7 +19,7 @@ export function setSession(user) {
 }
 
 export function clearSession() {
-  localStorage.removeItem(SESSION_KEY)
+  sessionStorage.removeItem(SESSION_KEY)
 }
 
 export function isAdmin() {
