@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getAllStudents, createStudent, deleteStudent, updateStudentPassword } from '../../db'
 import AdminLayout from '../../components/AdminLayout'
+import ConfirmDialog from '../../components/ConfirmDialog'
 
 export default function StudentManagement() {
   const [students, setStudents] = useState([])
@@ -18,6 +19,7 @@ export default function StudentManagement() {
   // Password reset
   const [resetFor, setResetFor] = useState(null)
   const [resetPwd, setResetPwd] = useState('')
+  const [confirmDialog, setConfirmDialog] = useState(null)
 
   async function load() {
     try {
@@ -61,15 +63,20 @@ export default function StudentManagement() {
     }
   }
 
-  async function handleDelete(student) {
-    if (!confirm(`Delete student "${student.username}"? This will remove all their course assignments.`)) return
-    try {
-      await deleteStudent(student.id)
-      setStudents(prev => prev.filter(s => s.id !== student.id))
-      setSuccess(`Student "${student.username}" deleted.`)
-    } catch (err) {
-      setError('Failed to delete student.')
-    }
+  function handleDelete(student) {
+    setConfirmDialog({
+      message: `Delete student "${student.username}"? This will remove all their course assignments.`,
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          await deleteStudent(student.id)
+          setStudents(prev => prev.filter(s => s.id !== student.id))
+          setSuccess(`Student "${student.username}" deleted.`)
+        } catch (err) {
+          setError('Failed to delete student.')
+        }
+      },
+    })
   }
 
   async function handleResetPassword(e) {
@@ -204,6 +211,16 @@ export default function StudentManagement() {
           </table>
         )}
       </div>
+
+      {/* Confirm Dialog */}
+      {confirmDialog && (
+        <ConfirmDialog
+          message={confirmDialog.message}
+          confirmLabel="Delete"
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
 
       {/* Reset Password Modal */}
       {resetFor && (

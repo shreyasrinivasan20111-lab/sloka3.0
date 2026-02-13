@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAllCourses, deleteCourse, getAllStudents, getAssignedStudents, assignCourse, unassignCourse } from '../../db'
 import AdminLayout from '../../components/AdminLayout'
+import ConfirmDialog from '../../components/ConfirmDialog'
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -12,6 +13,7 @@ export default function AdminDashboard() {
   const [assignModal, setAssignModal] = useState(null) // { course }
   const [assignedIds, setAssignedIds] = useState([])
   const [assignLoading, setAssignLoading] = useState(false)
+  const [confirmDialog, setConfirmDialog] = useState(null) // { message, onConfirm }
 
   async function load() {
     try {
@@ -28,14 +30,19 @@ export default function AdminDashboard() {
 
   useEffect(() => { load() }, [])
 
-  async function handleDelete(course) {
-    if (!confirm(`Delete course "${course.title}"? This cannot be undone.`)) return
-    try {
-      await deleteCourse(course.id)
-      setCourses(prev => prev.filter(c => c.id !== course.id))
-    } catch (err) {
-      setError('Failed to delete course.')
-    }
+  function handleDelete(course) {
+    setConfirmDialog({
+      message: `Delete course "${course.title}"? This cannot be undone.`,
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          await deleteCourse(course.id)
+          setCourses(prev => prev.filter(c => c.id !== course.id))
+        } catch (err) {
+          setError('Failed to delete course.')
+        }
+      },
+    })
   }
 
   async function openAssign(course) {
@@ -129,6 +136,16 @@ export default function AdminDashboard() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Confirm Dialog */}
+      {confirmDialog && (
+        <ConfirmDialog
+          message={confirmDialog.message}
+          confirmLabel="Delete"
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
       )}
 
       {/* Assign Modal */}

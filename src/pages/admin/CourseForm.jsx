@@ -13,6 +13,7 @@ import {
 import { uploadFile, detectFileType } from '../../blobUpload'
 import { getSession } from '../../auth'
 import AdminLayout from '../../components/AdminLayout'
+import ConfirmDialog from '../../components/ConfirmDialog'
 
 const QUILL_MODULES = {
   toolbar: [
@@ -41,6 +42,7 @@ export default function CourseForm() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [confirmDialog, setConfirmDialog] = useState(null)
   const fileInputRef = useRef()
 
   useEffect(() => {
@@ -94,14 +96,19 @@ export default function CourseForm() {
     setNewFiles(prev => prev.filter((_, i) => i !== idx))
   }
 
-  async function handleDeleteExisting(att) {
-    if (!confirm(`Remove attachment "${att.label}"?`)) return
-    try {
-      await deleteAttachment(att.id)
-      setAttachments(prev => prev.filter(a => a.id !== att.id))
-    } catch (err) {
-      setError('Failed to remove attachment.')
-    }
+  function handleDeleteExisting(att) {
+    setConfirmDialog({
+      message: `Remove attachment "${att.label}"?`,
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          await deleteAttachment(att.id)
+          setAttachments(prev => prev.filter(a => a.id !== att.id))
+        } catch (err) {
+          setError('Failed to remove attachment.')
+        }
+      },
+    })
   }
 
   async function handleSubmit(e) {
@@ -320,6 +327,15 @@ export default function CourseForm() {
             </button>
           </div>
         </form>
+      )}
+
+      {confirmDialog && (
+        <ConfirmDialog
+          message={confirmDialog.message}
+          confirmLabel="Remove"
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
       )}
     </AdminLayout>
   )
