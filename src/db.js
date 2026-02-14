@@ -22,9 +22,15 @@ export async function initDB() {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'student',
+      full_name TEXT,
+      status TEXT NOT NULL DEFAULT 'approved',
       created_at TEXT DEFAULT (datetime('now'))
     )
   `)
+
+  // Add columns to existing databases that predate these fields
+  try { await db.execute(`ALTER TABLE users ADD COLUMN full_name TEXT`) } catch {}
+  try { await db.execute(`ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'`) } catch {}
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS courses (
@@ -66,6 +72,18 @@ export async function initDB() {
     )
   `)
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS course_time_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      student_id INTEGER NOT NULL,
+      course_id INTEGER NOT NULL,
+      duration_seconds INTEGER NOT NULL DEFAULT 0,
+      logged_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(course_id) REFERENCES courses(id) ON DELETE CASCADE
+    )
+  `)
+
   // Seed default settings
   await db.execute(`
     INSERT OR IGNORE INTO settings (key, value) VALUES ('portal_closed', 'false')
@@ -89,19 +107,47 @@ export async function getUserByLogin(identifier, password) {
     sql: `SELECT * FROM users WHERE (username = ? OR email = ?) AND password = ? LIMIT 1`,
     args: [identifier, identifier, password],
   })
-  return result.rows[0] || null
+  const user = result.rows[0] || null
+  if (user && user.role === 'student' && user.status === 'pending') {
+    return { __pending: true }
+  }
+  return user
 }
 
 export async function getAllStudents() {
   const db = getClient()
-  const result = await db.execute(`SELECT * FROM users WHERE role = 'student' ORDER BY username`)
+  const result = await db.execute(`SELECT * FROM users WHERE role = 'student' AND status = 'approved' ORDER BY username`)
   return result.rows
+}
+
+export async function getPendingStudents() {
+  const db = getClient()
+  const result = await db.execute(`SELECT * FROM users WHERE role = 'student' AND status = 'pending' ORDER BY created_at DESC`)
+  return result.rows
+}
+
+export async function createSignupRequest(username, email, password, fullName) {
+  const db = getClient()
+  await db.execute({
+    sql: `INSERT INTO users (username, email, password, role, full_name, status) VALUES (?, ?, ?, 'student', ?, 'pending')`,
+    args: [username, email, password, fullName || null],
+  })
+}
+
+export async function approveStudent(id) {
+  const db = getClient()
+  await db.execute({ sql: `UPDATE users SET status = 'approved' WHERE id = ?`, args: [id] })
+}
+
+export async function rejectStudent(id) {
+  const db = getClient()
+  await db.execute({ sql: `DELETE FROM users WHERE id = ? AND role = 'student' AND status = 'pending'`, args: [id] })
 }
 
 export async function createStudent(username, email, password) {
   const db = getClient()
   await db.execute({
-    sql: `INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, 'student')`,
+    sql: `INSERT INTO users (username, email, password, role, status) VALUES (?, ?, ?, 'student', 'approved')`,
     args: [username, email, password],
   })
 }
@@ -244,4 +290,29 @@ export async function getAllSettings() {
     map[row.key] = row.value
   }
   return map
+}
+
+// ─── Course Time Logs ─────────────────────────────────────────────────────────
+
+export async function logCourseTime(studentId, courseId, durationSeconds) {
+  if (durationSeconds < 1) return
+  const db = getClient()
+  await db.execute({
+    sql: `INSERT INTO course_time_logs (student_id, course_id, duration_seconds) VALUES (?, ?, ?)`,
+    args: [studentId, courseId, durationSeconds],
+  })
+}
+
+export async function getStudentTimeSummary(studentId) {
+  const db = getClient()
+  const result = await db.execute({
+    sql: `SELECT c.title, SUM(tl.duration_seconds) AS total_seconds
+          FROM course_time_logs tl
+          JOIN courses c ON c.id = tl.course_id
+          WHERE tl.student_id = ?
+          GROUP BY tl.course_id, c.title
+          ORDER BY total_seconds DESC`,
+    args: [studentId],
+  })
+  return result.rows
 }

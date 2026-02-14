@@ -1,9 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getCourseById, getAttachmentsByCourse } from '../db'
+import { getCourseById, getAttachmentsByCourse, logCourseTime } from '../db'
 import { getSession } from '../auth'
 import Layout from '../components/Layout'
 import AttachmentViewer from '../components/AttachmentViewer'
+
+function formatTime(seconds) {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 
 const TABS = [
   { id: 'content', label: '📖 Content' },
@@ -19,6 +27,9 @@ export default function CourseView() {
   const [activeTab, setActiveTab] = useState('content')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [elapsed, setElapsed] = useState(0)
+  const startTimeRef = useRef(null)
+  const intervalRef = useRef(null)
 
   useEffect(() => {
     async function load() {
@@ -42,6 +53,22 @@ export default function CourseView() {
     }
     load()
   }, [id])
+
+  // Start stopwatch once course is loaded (only for students)
+  useEffect(() => {
+    if (!course || session?.role !== 'student') return
+    startTimeRef.current = Date.now()
+    intervalRef.current = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000))
+    }, 1000)
+    return () => {
+      clearInterval(intervalRef.current)
+      const secs = Math.floor((Date.now() - startTimeRef.current) / 1000)
+      if (secs >= 1 && session?.id) {
+        logCourseTime(session.id, id, secs).catch(() => {})
+      }
+    }
+  }, [course])
 
   const backPath = session?.role === 'admin' ? '/admin' : '/student'
 
@@ -78,6 +105,17 @@ export default function CourseView() {
           </button>
           <h1>{course.title}</h1>
         </div>
+        {session?.role === 'student' && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            background: 'var(--maroon)', color: 'var(--gold-light)',
+            padding: '6px 14px', borderRadius: '20px',
+            fontFamily: 'monospace', fontSize: '1rem', fontWeight: 700,
+            letterSpacing: '0.05em', whiteSpace: 'nowrap',
+          }}>
+            ⏱ {formatTime(elapsed)}
+          </div>
+        )}
       </div>
 
       {course.description && (

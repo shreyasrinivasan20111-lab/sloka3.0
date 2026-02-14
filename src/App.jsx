@@ -4,6 +4,7 @@ import { initDB } from './db'
 
 import HomePage from './pages/HomePage'
 import Login from './pages/Login'
+import StudentSignup from './pages/StudentSignup'
 import StudentDashboard from './pages/StudentDashboard'
 import CourseView from './pages/CourseView'
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -56,6 +57,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<StudentSignup />} />
 
         {/* Student routes */}
         <Route path="/student" element={

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Navigate } from 'react-router-dom'
+import { useNavigate, Navigate, Link } from 'react-router-dom'
 import { getUserByLogin, getSetting } from '../db'
 import { setSession, getSession } from '../auth'
 
@@ -38,6 +38,7 @@ export default function HomePage() {
       if (portalClosed === 'true') {
         const user = await getUserByLogin(identifier.trim(), password)
         if (!user) { setError('Invalid username/email or password.'); return }
+        if (user.__pending) { setError('Your account is pending admin approval. Please wait for confirmation.'); return }
         if (user.role === 'student') {
           setError('The portal is currently closed. Please contact your administrator.')
           return
@@ -48,6 +49,7 @@ export default function HomePage() {
       }
       const user = await getUserByLogin(identifier.trim(), password)
       if (!user) { setError('Invalid username/email or password.'); return }
+      if (user.__pending) { setError('Your account is pending admin approval. Please wait for confirmation.'); return }
       setSession(user)
       navigate(user.role === 'admin' ? '/admin' : '/student')
     } catch (err) {
@@ -75,9 +77,20 @@ export default function HomePage() {
           <img src="/lotus.svg" alt="Sai Kalpataru" style={{ width: 36, height: 36 }} />
           Sai Kalpataru
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={openLogin} style={{ fontWeight: 700 }}>
-          🕉 Login
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Link
+            to="/signup"
+            style={{
+              color: 'var(--gold-light)', fontSize: '0.85rem', textDecoration: 'none',
+              opacity: 0.85, letterSpacing: '0.04em',
+            }}
+          >
+            New Student? Sign Up
+          </Link>
+          <button className="btn btn-secondary btn-sm" onClick={openLogin} style={{ fontWeight: 700 }}>
+            🕉 Login
+          </button>
+        </div>
       </header>
 
       {/* Hero */}

@@ -1,10 +1,23 @@
 import { useState, useEffect } from 'react'
-import { getAllStudents, createStudent, deleteStudent, updateStudentPassword } from '../../db'
+import {
+  getAllStudents, createStudent, deleteStudent, updateStudentPassword,
+  getPendingStudents, approveStudent, rejectStudent, getStudentTimeSummary,
+} from '../../db'
 import AdminLayout from '../../components/AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
 
+function formatSeconds(total) {
+  if (!total || total < 1) return '0m 0s'
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (h > 0) return `${h}h ${m}m ${s}s`
+  return `${m}m ${s}s`
+}
+
 export default function StudentManagement() {
   const [students, setStudents] = useState([])
+  const [pending, setPending] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -21,10 +34,16 @@ export default function StudentManagement() {
   const [resetPwd, setResetPwd] = useState('')
   const [confirmDialog, setConfirmDialog] = useState(null)
 
+  // Time modal
+  const [timeModal, setTimeModal] = useState(null) // { student }
+  const [timeSummary, setTimeSummary] = useState([])
+  const [timeLoading, setTimeLoading] = useState(false)
+
   async function load() {
     try {
-      const data = await getAllStudents()
+      const [data, pend] = await Promise.all([getAllStudents(), getPendingStudents()])
       setStudents(data)
+      setPending(pend)
     } catch (err) {
       setError('Failed to load students.')
       console.error(err)
@@ -92,6 +111,46 @@ export default function StudentManagement() {
     }
   }
 
+  async function handleApprove(student) {
+    try {
+      await approveStudent(student.id)
+      setPending(prev => prev.filter(s => s.id !== student.id))
+      setSuccess(`"${student.username}" approved and can now log in.`)
+      await load()
+    } catch (err) {
+      setError('Failed to approve student.')
+    }
+  }
+
+  function handleReject(student) {
+    setConfirmDialog({
+      message: `Reject and delete signup request from "${student.username}"?`,
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          await rejectStudent(student.id)
+          setPending(prev => prev.filter(s => s.id !== student.id))
+          setSuccess(`Signup request from "${student.username}" rejected.`)
+        } catch (err) {
+          setError('Failed to reject request.')
+        }
+      },
+    })
+  }
+
+  async function openTimeModal(student) {
+    setTimeModal({ student })
+    setTimeLoading(true)
+    try {
+      const summary = await getStudentTimeSummary(student.id)
+      setTimeSummary(summary)
+    } catch (err) {
+      setTimeSummary([])
+    } finally {
+      setTimeLoading(false)
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="page-header">
@@ -106,6 +165,57 @@ export default function StudentManagement() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
+
+      {/* Pending Approvals */}
+      {pending.length > 0 && (
+        <div className="card" style={{ marginBottom: '24px', borderLeft: '4px solid var(--saffron)' }}>
+          <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.2rem' }}>⏳</span>
+            <h3 style={{ margin: 0 }}>Pending Approvals ({pending.length})</h3>
+          </div>
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Full Name</th>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Requested</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pending.map(s => (
+                  <tr key={s.id}>
+                    <td style={{ fontWeight: 600 }}>{s.full_name || '—'}</td>
+                    <td>{s.username}</td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{s.email}</td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      {new Date(s.created_at).toLocaleDateString()}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleApprove(s)}
+                        >
+                          ✔ Approve
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleReject(s)}
+                        >
+                          ✕ Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Create Student Form */}
       {showForm && (
@@ -185,13 +295,22 @@ export default function StudentManagement() {
                   <td style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
                   <td>
                     <span style={{ fontWeight: 700 }}>{s.username}</span>
+                    {s.full_name && (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{s.full_name}</div>
+                    )}
                   </td>
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{s.email}</td>
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                     {new Date(s.created_at).toLocaleDateString()}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => openTimeModal(s)}
+                      >
+                        ⏱ Time
+                      </button>
                       <button
                         className="btn btn-secondary btn-sm"
                         onClick={() => { setResetFor(s); setResetPwd(''); setError('') }}
@@ -218,7 +337,7 @@ export default function StudentManagement() {
       {confirmDialog && (
         <ConfirmDialog
           message={confirmDialog.message}
-          confirmLabel="Delete"
+          confirmLabel="Confirm"
           onConfirm={confirmDialog.onConfirm}
           onCancel={() => setConfirmDialog(null)}
         />
@@ -254,6 +373,55 @@ export default function StudentManagement() {
                   ✔ Update Password
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Time Modal */}
+      {timeModal && (
+        <div className="viewer-modal-overlay" onClick={() => setTimeModal(null)}>
+          <div
+            className="viewer-modal"
+            style={{ maxWidth: '520px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="viewer-modal-header">
+              <h3>⏱ Time Report: {timeModal.student.username}</h3>
+              <button className="btn-close" onClick={() => setTimeModal(null)}>✕</button>
+            </div>
+            <div className="viewer-modal-body" style={{ padding: '24px', overflowY: 'auto', maxHeight: '60vh' }}>
+              {timeLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                  <div className="spinner" style={{ margin: '0 auto' }} />
+                </div>
+              ) : timeSummary.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">⏱</div>
+                  <p>No time logged yet for this student.</p>
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Course</th>
+                        <th style={{ textAlign: 'right' }}>Total Time Spent</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {timeSummary.map((row, i) => (
+                        <tr key={i}>
+                          <td style={{ fontWeight: 600 }}>{row.title}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'monospace', color: 'var(--saffron-dark)', fontWeight: 700 }}>
+                            {formatSeconds(Number(row.total_seconds))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>

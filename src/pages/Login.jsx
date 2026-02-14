@@ -32,6 +32,10 @@ export default function Login() {
           setError('Invalid username/email or password.')
           return
         }
+        if (user.__pending) {
+          setError('Your account is pending admin approval. Please wait for confirmation.')
+          return
+        }
         if (user.role === 'student') {
           setError('The portal is currently closed. Please contact your administrator.')
           return
@@ -44,6 +48,10 @@ export default function Login() {
       const user = await getUserByLogin(identifier.trim(), password)
       if (!user) {
         setError('Invalid username/email or password.')
+        return
+      }
+      if (user.__pending) {
+        setError('Your account is pending admin approval. Please wait for confirmation.')
         return
       }
       setSession(user)
