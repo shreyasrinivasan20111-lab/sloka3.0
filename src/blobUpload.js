@@ -18,10 +18,44 @@ export async function uploadFile(file, folder = 'attachments') {
 /**
  * Detect file type from MIME or extension.
  * @param {File} file
- * @returns {'pdf' | 'audio' | 'unknown'}
+ * @returns {'pdf' | 'doc' | 'image' | 'video' | 'audio' | 'archive' | 'unknown'}
  */
 export function detectFileType(file) {
+  // PDF
   if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) return 'pdf'
-  if (file.type.startsWith('audio/') || /\.(mp3|wav|ogg|aac|m4a)$/i.test(file.name)) return 'audio'
+
+  // Word documents
+  if (
+    file.type === 'application/msword' ||
+    file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    /\.(doc|docx)$/i.test(file.name)
+  ) return 'doc'
+
+  // Images
+  if (
+    file.type.startsWith('image/') ||
+    /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.name)
+  ) return 'image'
+
+  // Video
+  if (
+    file.type.startsWith('video/') ||
+    /\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i.test(file.name)
+  ) return 'video'
+
+  // Audio
+  if (
+    file.type.startsWith('audio/') ||
+    /\.(mp3|wav|ogg|aac|m4a|flac|wma)$/i.test(file.name)
+  ) return 'audio'
+
+  // Archives
+  if (
+    file.type === 'application/zip' ||
+    file.type === 'application/x-rar-compressed' ||
+    file.type === 'application/x-rar' ||
+    /\.(zip|rar|7z|tar|gz)$/i.test(file.name)
+  ) return 'archive'
+
   return 'unknown'
 }

@@ -72,10 +72,10 @@ export default function CourseForm() {
     const files = Array.from(e.target.files)
     const valid = files.filter(f => {
       const t = detectFileType(f)
-      return t === 'pdf' || t === 'audio'
+      return t !== 'unknown'
     })
     if (valid.length !== files.length) {
-      setError('Only PDF and audio files are allowed.')
+      setError('Some files were not recognized. Supported formats: PDF, DOC/DOCX, images (JPG, PNG), videos (MP4, AVI), audio (MP3, WAV), archives (ZIP, RAR).')
     }
     const entries = valid.map(file => ({
       file,
@@ -234,7 +234,14 @@ export default function CourseForm() {
                 <tbody>
                   {attachments.map(att => (
                     <tr key={att.id}>
-                      <td>{att.file_type === 'pdf' ? '📄 PDF' : '🎵 Audio'}</td>
+                      <td>
+                        {att.file_type === 'pdf' ? '📄 PDF' :
+                         att.file_type === 'doc' ? '📝 DOC' :
+                         att.file_type === 'image' ? '🖼 Image' :
+                         att.file_type === 'video' ? '🎬 Video' :
+                         att.file_type === 'audio' ? '🎵 Audio' :
+                         att.file_type === 'archive' ? '📦 Archive' : '📎 File'}
+                      </td>
                       <td>{att.label}</td>
                       <td>
                         <button
@@ -268,7 +275,7 @@ export default function CourseForm() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,audio/*"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.mp4,.avi,.mov,.mp3,.wav,.aac,.m4a,.zip,.rar,.7z,image/*,video/*,audio/*"
               multiple
               style={{ display: 'none' }}
               onChange={handleFileAdd}
@@ -276,7 +283,7 @@ export default function CourseForm() {
 
             {newFiles.length === 0 ? (
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '8px' }}>
-                No new files selected. Click "Choose Files" to add PDF or audio attachments.
+                No new files selected. Supported formats: PDF, DOC/DOCX, images, videos, audio, archives.
               </p>
             ) : (
               <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -290,7 +297,14 @@ export default function CourseForm() {
                     border: '1px solid var(--border)',
                     borderRadius: 'var(--radius-sm)',
                   }}>
-                    <span>{detectFileType(entry.file) === 'pdf' ? '📄' : '🎵'}</span>
+                    <span>
+                      {detectFileType(entry.file) === 'pdf' ? '📄' :
+                       detectFileType(entry.file) === 'doc' ? '📝' :
+                       detectFileType(entry.file) === 'image' ? '🖼' :
+                       detectFileType(entry.file) === 'video' ? '🎬' :
+                       detectFileType(entry.file) === 'audio' ? '🎵' :
+                       detectFileType(entry.file) === 'archive' ? '📦' : '📎'}
+                    </span>
                     <input
                       className="form-control"
                       style={{ flex: 1 }}

@@ -13,6 +13,18 @@ function formatTime(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+function getFileIcon(fileType) {
+  switch (fileType) {
+    case 'pdf': return '📄'
+    case 'doc': return '📝'
+    case 'image': return '🖼'
+    case 'video': return '🎬'
+    case 'audio': return '🎵'
+    case 'archive': return '📦'
+    default: return '📎'
+  }
+}
+
 const TABS = [
   { id: 'content', label: '📖 Content' },
   { id: 'attachments', label: '📎 Attachments' },
@@ -43,7 +55,11 @@ export default function CourseView() {
           return
         }
         setCourse(c)
-        setAttachments(atts)
+        // Sort attachments alphabetically by label
+        const sortedAtts = [...atts].sort((a, b) =>
+          a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+        )
+        setAttachments(sortedAtts)
       } catch (err) {
         setError('Could not load course.')
         console.error(err)
@@ -140,7 +156,7 @@ export default function CourseView() {
             className={`tab-btn${activeTab === `att-${att.id}` ? ' active' : ''}`}
             onClick={() => setActiveTab(`att-${att.id}`)}
           >
-            {att.file_type === 'pdf' ? '📄' : '🎵'} {att.label}
+            {getFileIcon(att.file_type)} {att.label}
           </button>
         ))}
       </div>
