@@ -153,7 +153,7 @@ export default function AdminDashboard() {
         <div className="viewer-modal-overlay" onClick={() => setAssignModal(null)}>
           <div className="viewer-modal" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
             <div className="viewer-modal-header">
-              <h3>👥 Assign: {assignModal.course.title}</h3>
+              <h3>👥 Assign: <span className="course-title">{assignModal.course.title}</span></h3>
               <button className="btn-close" onClick={() => setAssignModal(null)}>✕</button>
             </div>
             <div className="viewer-modal-body" style={{ padding: '24px', overflowY: 'auto', maxHeight: '60vh' }}>

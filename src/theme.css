@@ -267,6 +267,11 @@ textarea.form-control {
   font-size: 1.8rem;
 }
 
+.course-title {
+  font-family: 'Times New Roman', Times, serif;
+  letter-spacing: normal;
+}
+
 /* ─── Divider ────────────────────────────────────────── */
 
 .divider {
@@ -329,6 +334,8 @@ textarea.form-control {
   color: var(--gold-light);
   font-size: 1.05rem;
   margin-bottom: 6px;
+  font-family: 'Times New Roman', Times, serif;
+  letter-spacing: normal;
 }
 
 .course-card-header p {

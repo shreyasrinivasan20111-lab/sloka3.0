@@ -119,7 +119,7 @@ export default function CourseView() {
           >
             ←
           </button>
-          <h1>{course.title}</h1>
+          <h1 className="course-title">{course.title}</h1>
         </div>
         {session?.role === 'student' && (
           <div style={{
