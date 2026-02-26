@@ -14,7 +14,7 @@ export default function AdminDashboard() {
   const [assignedIds, setAssignedIds] = useState([])
   const [assignLoading, setAssignLoading] = useState(false)
   const [confirmDialog, setConfirmDialog] = useState(null) // { message, onConfirm }
-  const [sortBy, setSortBy] = useState('date') // 'date' | 'a-z' | 'z-a'
+  const [sortBy, setSortBy] = useState('date') // 'date' | 'date-oldest' | 'a-z' | 'z-a'
 
   async function load() {
     try {
@@ -78,6 +78,9 @@ export default function AdminDashboard() {
     } else if (sortBy === 'date') {
       // Default: newest first (descending by created_at)
       sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    } else if (sortBy === 'date-oldest') {
+      // Oldest first (ascending by created_at)
+      sorted.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     }
 
     return sorted
@@ -130,6 +133,7 @@ export default function AdminDashboard() {
               onChange={e => setSortBy(e.target.value)}
             >
               <option value="date">📅 Date (Newest First)</option>
+              <option value="date-oldest">📅 Date (Oldest First)</option>
               <option value="a-z">🔤 A to Z</option>
               <option value="z-a">🔤 Z to A</option>
             </select>
