@@ -14,6 +14,7 @@ export default function AdminDashboard() {
   const [assignedIds, setAssignedIds] = useState([])
   const [assignLoading, setAssignLoading] = useState(false)
   const [confirmDialog, setConfirmDialog] = useState(null) // { message, onConfirm }
+  const [sortBy, setSortBy] = useState('date') // 'date' | 'a-z' | 'z-a'
 
   async function load() {
     try {
@@ -67,6 +68,21 @@ export default function AdminDashboard() {
     }
   }
 
+  function getSortedCourses() {
+    const sorted = [...courses]
+
+    if (sortBy === 'a-z') {
+      sorted.sort((a, b) => a.title.localeCompare(b.title))
+    } else if (sortBy === 'z-a') {
+      sorted.sort((a, b) => b.title.localeCompare(a.title))
+    } else if (sortBy === 'date') {
+      // Default: newest first (descending by created_at)
+      sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    }
+
+    return sorted
+  }
+
   return (
     <AdminLayout>
       <div className="page-header">
@@ -95,8 +111,32 @@ export default function AdminDashboard() {
           </button>
         </div>
       ) : (
-        <div className="course-grid">
-          {courses.map(course => (
+        <>
+          {/* Sorting Controls */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            marginBottom: '16px',
+            gap: '12px'
+          }}>
+            <label style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+              Sort by:
+            </label>
+            <select
+              className="form-control"
+              style={{ width: 'auto', minWidth: '180px' }}
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+            >
+              <option value="date">📅 Date (Newest First)</option>
+              <option value="a-z">🔤 A to Z</option>
+              <option value="z-a">🔤 Z to A</option>
+            </select>
+          </div>
+
+          <div className="course-grid">
+            {getSortedCourses().map(course => (
             <div key={course.id} className="course-card">
               <div
                 className="course-card-header"
@@ -135,7 +175,8 @@ export default function AdminDashboard() {
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Confirm Dialog */}
