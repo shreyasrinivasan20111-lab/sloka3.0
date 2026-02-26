@@ -10,6 +10,7 @@ import CourseView from './pages/CourseView'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import CourseForm from './pages/admin/CourseForm'
 import StudentManagement from './pages/admin/StudentManagement'
+import AttendanceManagement from './pages/admin/AttendanceManagement'
 import Settings from './pages/admin/Settings'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -79,6 +80,9 @@ export default function App() {
         } />
         <Route path="/admin/students" element={
           <ProtectedRoute role="admin"><StudentManagement /></ProtectedRoute>
+        } />
+        <Route path="/admin/attendance" element={
+          <ProtectedRoute role="admin"><AttendanceManagement /></ProtectedRoute>
         } />
         <Route path="/admin/settings" element={
           <ProtectedRoute role="admin"><Settings /></ProtectedRoute>

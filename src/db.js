@@ -84,6 +84,22 @@ export async function initDB() {
     )
   `)
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS attendance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      course_id INTEGER NOT NULL,
+      student_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('present', 'absent', 'late')),
+      marked_by INTEGER NOT NULL,
+      marked_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(course_id, student_id, date),
+      FOREIGN KEY(course_id) REFERENCES courses(id) ON DELETE CASCADE,
+      FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(marked_by) REFERENCES users(id)
+    )
+  `)
+
   // Seed default settings
   await db.execute(`
     INSERT OR IGNORE INTO settings (key, value) VALUES ('portal_closed', 'false')
@@ -313,6 +329,66 @@ export async function getStudentTimeSummary(studentId) {
           GROUP BY tl.course_id, c.title
           ORDER BY total_seconds DESC`,
     args: [studentId],
+  })
+  return result.rows
+}
+
+// ─── Attendance ───────────────────────────────────────────────────────────
+
+export async function getAttendanceByDateAndCourse(date, courseId) {
+  const db = getClient()
+  const result = await db.execute({
+    sql: `SELECT a.*, u.username, u.full_name
+          FROM attendance a
+          JOIN users u ON u.id = a.student_id
+          WHERE a.date = ? AND a.course_id = ?
+          ORDER BY u.full_name, u.username`,
+    args: [date, courseId],
+  })
+  return result.rows
+}
+
+export async function saveAttendance(courseId, studentId, date, status, markedBy) {
+  const db = getClient()
+  await db.execute({
+    sql: `INSERT INTO attendance (course_id, student_id, date, status, marked_by)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(course_id, student_id, date)
+          DO UPDATE SET status = excluded.status, marked_by = excluded.marked_by, marked_at = datetime('now')`,
+    args: [courseId, studentId, date, status, markedBy],
+  })
+}
+
+export async function bulkSaveAttendance(records) {
+  const db = getClient()
+  for (const record of records) {
+    await saveAttendance(record.courseId, record.studentId, record.date, record.status, record.markedBy)
+  }
+}
+
+export async function getAttendanceByMonth(courseId, year, month) {
+  const db = getClient()
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+  const endDate = month === 12
+    ? `${year + 1}-01-01`
+    : `${year}-${String(month + 1).padStart(2, '0')}-01`
+
+  const result = await db.execute({
+    sql: `SELECT a.*, u.username, u.full_name
+          FROM attendance a
+          JOIN users u ON u.id = a.student_id
+          WHERE a.course_id = ? AND a.date >= ? AND a.date < ?
+          ORDER BY a.date DESC, u.full_name, u.username`,
+    args: [courseId, startDate, endDate],
+  })
+  return result.rows
+}
+
+export async function getCoursesCreatedByAdmin(adminId) {
+  const db = getClient()
+  const result = await db.execute({
+    sql: `SELECT * FROM courses WHERE created_by = ? ORDER BY title`,
+    args: [adminId],
   })
   return result.rows
 }

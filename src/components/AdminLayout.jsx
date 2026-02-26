@@ -61,6 +61,12 @@ export default function AdminLayout({ children }) {
           >
             👥 Manage Students
           </NavLink>
+          <NavLink
+            to="/admin/attendance"
+            className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+          >
+            📋 Manage Attendance
+          </NavLink>
 
           <div className="sidebar-label" style={{ marginTop: '16px' }}>Portal</div>
           <NavLink
